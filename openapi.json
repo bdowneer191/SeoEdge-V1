@@ -1,0 +1,111 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SeoEdge GSC Ingestion API",
+    "version": "1.0.0",
+    "description": "API for ingesting data from Google Search Console."
+  },
+  "paths": {
+    "/api/ingest/gsc": {
+      "post": {
+        "summary": "Trigger GSC Data Ingestion",
+        "description": "Starts the process of fetching performance data from GSC and saving it to Firestore. This is an asynchronous operation; the endpoint returns immediately with a success message if the job is accepted.",
+        "tags": [
+          "Ingestion"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted. The ingestion process has been successfully started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "GSC ingestion process started successfully."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request. Missing or invalid parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error. The server failed to start the ingestion process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "IngestionRequest": {
+        "type": "object",
+        "properties": {
+          "siteUrl": {
+            "type": "string",
+            "description": "The GSC property URL (e.g., 'sc-domain:example.com' or 'https://www.example.com/').",
+            "example": "sc-domain:example.com"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "description": "The start date for the data fetch, in YYYY-MM-DD format.",
+            "example": "2023-10-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "description": "The end date for the data fetch, in YYYY-MM-DD format.",
+            "example": "2023-10-31"
+          }
+        },
+        "required": [
+          "siteUrl",
+          "startDate",
+          "endDate"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "A summary of the error."
+          },
+          "details": {
+            "type": "string",
+            "description": "Optional details about the error."
+          }
+        }
+      }
+    }
+  }
+}
