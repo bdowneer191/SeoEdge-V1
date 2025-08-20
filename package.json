@@ -9,11 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "next": "^15.5.0",
     "firebase-admin": "^13.4.0",
     "googleapis": "^156.0.0",
     "commander": "^14.0.0",
     "@jest/globals": "^30.0.5",
+    "next": "^15.5.0",
     "react": "^19.1.1"
   },
   "devDependencies": {
