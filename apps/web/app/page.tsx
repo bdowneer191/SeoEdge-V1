@@ -1,11 +1,19 @@
 import React from 'react';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import SiteSummary from '../components/dashboard/SiteSummary';
+import LosingPagesTable from '../components/dashboard/LosingPagesTable';
 
 export default function HomePage() {
   return (
     <DashboardLayout>
-      <h1>Welcome to SeoEdge</h1>
-      <p>This is the main content area where data visualizations will be displayed.</p>
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
+        <p className="text-gray-600 mt-1">An overview of your site's SEO performance.</p>
+      </header>
+      <div className="space-y-8">
+        <SiteSummary />
+        <LosingPagesTable />
+      </div>
     </DashboardLayout>
   );
 }
