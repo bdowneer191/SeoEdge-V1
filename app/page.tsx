@@ -1,7 +1,7 @@
 import React from 'react';
-import DashboardLayout from '../components/layout/DashboardLayout';
-import SiteSummary from '../components/dashboard/SiteSummary';
-import LosingPagesTable from '../components/dashboard/LosingPagesTable';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import SiteSummary from '@/components/dashboard/SiteSummary';
+import LosingPagesTable from '@/components/dashboard/LosingPagesTable';
 
 export default function HomePage() {
   return (
