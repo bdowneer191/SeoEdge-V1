@@ -4,7 +4,6 @@
  * CLI script for triggering GSC data ingestion.
  * Depends on the 'commander' package for argument parsing.
  */
-import { process } from 'node:process';
 import { Command } from 'commander';
 import { GSCIngestionService } from './GSCIngestionService';
 
