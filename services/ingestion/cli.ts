@@ -5,7 +5,7 @@
  * Depends on the 'commander' package for argument parsing.
  */
 import { Command } from 'commander';
-import { ingestGscData } from './gsc-ingestor';
+import { GSCIngestionService } from './GSCIngestionService';
 
 const program = new Command();
 
@@ -22,7 +22,8 @@ program
           throw new Error('Dates must be in YYYY-MM-DD format.');
       }
       
-      await ingestGscData(siteUrl, startDate, endDate);
+      const ingestionService = new GSCIngestionService();
+      await ingestionService.ingestData(siteUrl, startDate, endDate);
       process.exit(0);
     } catch (error) {
       console.error('❌ An error occurred during ingestion:', error);
