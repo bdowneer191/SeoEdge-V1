@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { PropsWithChildren } from 'react';
 
 /**
  * A placeholder for the main dashboard layout.
@@ -6,9 +6,7 @@ import React from 'react';
  */
 export default function DashboardLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: PropsWithChildren) {
   return (
     <main style={{ padding: '2rem' }}>
       {children}

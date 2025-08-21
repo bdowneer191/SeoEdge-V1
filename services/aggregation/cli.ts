@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import { AggregationService } from './AggregationService';
+import { process } from 'node:process';
 
 const program = new Command();
 

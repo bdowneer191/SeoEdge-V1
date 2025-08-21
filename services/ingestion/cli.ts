@@ -6,6 +6,7 @@
  */
 import { Command } from 'commander';
 import { GSCIngestionService } from './GSCIngestionService';
+import { process } from 'node:process';
 
 const program = new Command();
 
