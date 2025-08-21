@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { GSCIngestionService } from '../../../../../../services/ingestion/GSCIngestionService';
+import { ingestGscData } from '../../../../../../services/ingestion/gsc-ingestor';
 
 /**
  * API route handler to trigger the GSC data ingestion process.
@@ -19,13 +19,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Dates must be in YYYY-MM-DD format.' }, { status: 400 });
         }
 
-        // Using a try-catch block for the service instantiation as well
+        // Using a try-catch block for the service invocation
         try {
-            const ingestionService = new GSCIngestionService();
-            
             // Running this async, but not awaiting it, to avoid long-running serverless function timeouts.
             // For production, this should be moved to a background job queue (e.g., Google Cloud Tasks).
-            ingestionService.ingestData(siteUrl, startDate, endDate)
+            ingestGscData(siteUrl, startDate, endDate)
               .then(() => {
                 console.log(`GSC ingestion job completed successfully for ${siteUrl}.`);
               })
