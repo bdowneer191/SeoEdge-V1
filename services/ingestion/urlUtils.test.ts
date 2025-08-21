@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { normalizeUrl } from '../urlUtils';
+import { normalizeUrl } from './urlUtils';
 
 describe('normalizeUrl', () => {
   it('should add a trailing slash to a URL without one', () => {
