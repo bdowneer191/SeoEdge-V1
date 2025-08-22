@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 
-// Define TypeScript interfaces
 interface PageLoss {
   page: string;
   previousClicks: number;
@@ -18,88 +17,62 @@ interface SortConfig {
   direction: SortDirection;
 }
 
-// R4: Create a SortableHeader sub-component
-const SortableHeader = ({
-  sortKey,
-  title,
-  sortConfig,
-  requestSort,
-}: {
-  sortKey: SortKey;
-  title: string;
-  sortConfig: SortConfig | null;
-  requestSort: (key: SortKey) => void;
-}) => {
-  const isSorted = sortConfig?.key === sortKey;
-  const directionIcon = sortConfig?.direction === 'ascending' ? '▲' : '▼';
-
+const SortableHeader = ({ title, columnKey, sortConfig, requestSort }: { title: string, columnKey: SortKey, sortConfig: SortConfig | null, requestSort: (key: SortKey) => void }) => {
+  const isSorted = sortConfig?.key === columnKey;
+  const arrow = isSorted ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '';
   return (
-    <th
-      className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer"
-      onClick={() => requestSort(sortKey)}
-    >
-      {title} {isSorted ? directionIcon : ''}
+    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer" onClick={() => requestSort(columnKey)}>
+      {title} <span className="ml-1">{arrow}</span>
     </th>
   );
 };
 
-
 const LosingPagesTable: React.FC = () => {
   const [data, setData] = useState<PageLoss[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'changePercentage', direction: 'ascending' });
 
-  // R1: Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const formatDate = (date: Date) => date.toISOString().split('T')[0];
-
-        const currentEndDate = new Date();
-        const currentStartDate = new Date();
-        currentStartDate.setDate(currentEndDate.getDate() - 28);
-
-        const previousEndDate = new Date();
-        previousEndDate.setDate(currentStartDate.getDate() - 1);
-        const previousStartDate = new Date();
-        previousStartDate.setDate(previousEndDate.getDate() - 28);
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+        const now = new Date();
+        const currentEnd = new Date(now);
+        const currentStart = new Date(now);
+        currentStart.setDate(now.getDate() - 28);
+        const previousEnd = new Date(currentStart);
+        previousEnd.setDate(previousEnd.getDate() - 1);
+        const previousStart = new Date(previousEnd);
+        previousStart.setDate(previousEnd.getDate() - 28);
 
         const params = new URLSearchParams({
-            currentStartDate: formatDate(currentStartDate),
-            currentEndDate: formatDate(currentEndDate),
-            previousStartDate: formatDate(previousStartDate),
-            previousEndDate: formatDate(previousEndDate),
-            threshold: '0.3',
+          currentStartDate: formatDate(currentStart),
+          currentEndDate: formatDate(currentEnd),
+          previousStartDate: formatDate(previousStart),
+          previousEndDate: formatDate(previousEnd),
+          threshold: '0.3',
         });
 
-        const response = await fetch(`/api/pages/losses?${params.toString()}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch data: ${response.statusText}`);
-        }
+        const response = await fetch(`/api/pages/losses?${params}`);
+        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
         const result: PageLoss[] = await response.json();
         setData(result);
       } catch (e) {
-        setError(e as Error);
+        setError(e instanceof Error ? e.message : 'An unknown error occurred');
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
-  // R3: Client-side sorting
   const sortedData = useMemo(() => {
     let sortableItems = [...data];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
-          return sortConfig.direction === 'ascending' ? -1 : 1;
-        }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
-          return sortConfig.direction === 'ascending' ? 1 : -1;
-        }
+        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
     }
@@ -114,40 +87,39 @@ const LosingPagesTable: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
-  // R2: Loading state
-  if (loading) {
-    return <div className="text-white">Loading losing pages...</div>;
-  }
+  const TableSkeleton = () => (
+    <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 animate-pulse">
+      <div className="h-8 bg-gray-700 rounded mb-4"></div>
+      <div className="space-y-2">
+        <div className="h-6 bg-gray-700 rounded"></div>
+        <div className="h-6 bg-gray-700 rounded"></div>
+        <div className="h-6 bg-gray-700 rounded"></div>
+      </div>
+    </div>
+  );
 
-  // R2: Error state
-  if (error) {
-    return <div className="text-red-500">Error: {error.message}</div>;
-  }
+  if (loading) return <TableSkeleton />;
+  if (error) return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
 
   return (
     <section>
       <h2 className='text-xl font-semibold text-white mb-4'>Top Losing Pages</h2>
-      <div className="bg-gray-800 rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-700">
+      <div className="bg-gray-800 rounded-lg overflow-x-auto border border-gray-700">
+        <table className="min-w-full">
           <thead className="bg-gray-700/50">
             <tr>
-              <SortableHeader sortKey="page" title="Page" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="previousClicks" title="Previous Clicks" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="currentClicks" title="Current Clicks" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader sortKey="changePercentage" title="Change %" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader title="Page URL" columnKey="page" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader title="Previous Clicks" columnKey="previousClicks" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader title="Current Clicks" columnKey="currentClicks" sortConfig={sortConfig} requestSort={requestSort} />
+              <SortableHeader title="Change %" columnKey="changePercentage" sortConfig={sortConfig} requestSort={requestSort} />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-700">
-            {/* R5: Empty state */}
             {sortedData.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-gray-400">
-                  No pages with significant traffic loss found.
-                </td>
-              </tr>
+              <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No pages with significant traffic loss found.</td></tr>
             ) : (
               sortedData.map((item) => (
-                <tr key={item.page} className="hover:bg-gray-700/50">
+                <tr key={item.page} className="hover:bg-gray-700/50 transition-colors duration-200">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{item.page}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.previousClicks.toLocaleString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.currentClicks.toLocaleString()}</td>
