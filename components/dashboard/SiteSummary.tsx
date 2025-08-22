@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// R1: Define TypeScript interfaces
 interface SiteMetric {
   date: string;
   clicks: number;
@@ -19,100 +18,103 @@ interface SummaryStats {
   averagePosition: number;
 }
 
-// R5: Create a reusable StatCard sub-component
 const StatCard = ({ title, value }: { title: string; value: string | number }) => (
-  <div className="bg-gray-800 rounded-lg p-6">
-    <h3 className="text-sm font-medium text-gray-400">{title}</h3>
+  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+    <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
     <p className="mt-2 text-3xl font-bold text-white">{value}</p>
   </div>
 );
 
+const StatCardSkeleton = () => (
+  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 animate-pulse">
+    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+    <div className="h-8 bg-gray-700 rounded w-1/2 mt-3"></div>
+  </div>
+);
+
 const SiteSummary: React.FC = () => {
-  // R3: Use useState for loading, error, and success states
   const [data, setData] = useState<SiteMetric[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
 
-  // R2: useEffect to fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(endDate.getDate() - 28);
-
         const formatDate = (date: Date) => date.toISOString().split('T')[0];
 
         const response = await fetch(`/api/metrics/site?startDate=${formatDate(startDate)}&endDate=${formatDate(endDate)}`);
         if (!response.ok) {
-          throw new Error(`Failed to fetch data: ${response.statusText}`);
+          throw new Error(`API Error: ${response.statusText}`);
         }
         const result: SiteMetric[] = await response.json();
         setData(result);
 
-        // R4: Calculate summary statistics
         if (result.length > 0) {
           const totalClicks = result.reduce((acc, item) => acc + item.clicks, 0);
           const totalImpressions = result.reduce((acc, item) => acc + item.impressions, 0);
-          const totalCtr = result.reduce((acc, item) => acc + item.ctr, 0);
-          const totalPosition = result.reduce((acc, item) => acc + item.position, 0);
+          const weightedPositionSum = result.reduce((sum, item) => sum + (item.position * item.impressions), 0);
 
           setSummary({
             totalClicks,
             totalImpressions,
-            averageCtr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
-            averagePosition: result.length > 0 ? totalPosition / result.length : 0,
+            averageCtr: totalImpressions > 0 ? (totalClicks / totalImpressions) : 0,
+            averagePosition: totalImpressions > 0 ? (weightedPositionSum / totalImpressions) : 0,
           });
         }
-
       } catch (e) {
-        setError(e as Error);
+        setError(e instanceof Error ? e.message : 'An unknown error occurred');
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, []);
 
-  // R3: Loading state
   if (loading) {
-    return <div>Loading dashboard...</div>;
+    return (
+      <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <div className="bg-gray-800 rounded-lg p-6 mt-8 h-96 border border-gray-700 animate-pulse"></div>
+      </>
+    );
   }
 
-  // R3: Error state
   if (error) {
-    return <div className="text-red-500">Error: {error.message}</div>;
+    return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
   }
 
-  // R3: Success state
   return (
-    <div>
-      {/* Styling guide: Stat Cards */}
+    <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total Clicks" value={summary?.totalClicks.toLocaleString() ?? 'N/A'} />
         <StatCard title="Total Impressions" value={summary?.totalImpressions.toLocaleString() ?? 'N/A'} />
-        <StatCard title="Average CTR" value={`${summary?.averageCtr.toFixed(2) ?? '0.00'}%`} />
-        <StatCard title="Average Position" value={summary?.averagePosition.toFixed(1) ?? 'N/A'} />
+        <StatCard title="Average CTR" value={summary ? `${(summary.averageCtr * 100).toFixed(2)}%` : 'N/A'} />
+        <StatCard title="Average Position" value={summary ? summary.averagePosition.toFixed(1) : 'N/A'} />
       </div>
 
-      {/* Styling guide: Line Chart */}
-      <div className="bg-gray-800 rounded-lg p-6 mt-8 h-96">
+      <div className="bg-gray-800 rounded-lg p-6 mt-8 h-96 border border-gray-700">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
+          <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-            <XAxis dataKey="date" tick={{ fill: '#d1d5db' }} />
-            <YAxis yAxisId="left" tick={{ fill: '#d1d5db' }} />
-            <YAxis yAxisId="right" orientation="right" tick={{ fill: '#d1d5db' }} />
-            <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: 'none' }} />
-            <Legend />
-            <Line yAxisId="left" type="monotone" dataKey="clicks" stroke="#3b82f6" name="Clicks" />
-            <Line yAxisId="right" type="monotone" dataKey="impressions" stroke="#22c55e" name="Impressions" />
+            <XAxis dataKey="date" tick={{ fill: '#9ca3af' }} tickFormatter={(dateStr) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+            <YAxis tick={{ fill: '#9ca3af' }} />
+            <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.9)', border: '1px solid #4b5563', color: '#e5e7eb' }} />
+            <Legend wrapperStyle={{ color: '#e5e7eb' }}/>
+            <Line type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Clicks" />
+            <Line type="monotone" dataKey="impressions" stroke="#22c55e" strokeWidth={2} dot={false} name="Impressions" />
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </>
   );
 };
 

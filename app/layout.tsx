@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
-import React from 'react';
-import './globals.css'; // Make sure you have a globals.css file for base styles
+import { Inter } from 'next/font/google'; // Import the font
+import './globals.css';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+
+// Configure the font
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'SeoEdge',
@@ -15,7 +18,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      {/* Apply the font class to the body */}
+      <body className={inter.className}>
         <DashboardLayout>{children}</DashboardLayout>
       </body>
     </html>
