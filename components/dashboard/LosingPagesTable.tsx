@@ -2,21 +2,21 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 
+// Interfaces
 interface PageLoss {
   page: string;
   previousClicks: number;
   currentClicks: number;
   changePercentage: number;
 }
-
 type SortKey = keyof PageLoss;
 type SortDirection = 'ascending' | 'descending';
-
 interface SortConfig {
   key: SortKey;
   direction: SortDirection;
 }
 
+// Sub-components
 const SortableHeader = ({ title, columnKey, sortConfig, requestSort }: { title: string, columnKey: SortKey, sortConfig: SortConfig | null, requestSort: (key: SortKey) => void }) => {
   const isSorted = sortConfig?.key === columnKey;
   const arrow = isSorted ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '';
@@ -27,6 +27,16 @@ const SortableHeader = ({ title, columnKey, sortConfig, requestSort }: { title: 
   );
 };
 
+const TableRowSkeleton = () => (
+  <tr className="animate-pulse">
+    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-full"></div></td>
+    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
+  </tr>
+);
+
+// Main Component
 const LosingPagesTable: React.FC = () => {
   const [data, setData] = useState<PageLoss[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -34,6 +44,7 @@ const LosingPagesTable: React.FC = () => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'changePercentage', direction: 'ascending' });
 
   useEffect(() => {
+    // R2: Fetch data
     const fetchData = async () => {
       try {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
@@ -67,6 +78,7 @@ const LosingPagesTable: React.FC = () => {
     fetchData();
   }, []);
 
+  // R4: Client-side sorting
   const sortedData = useMemo(() => {
     let sortableItems = [...data];
     if (sortConfig !== null) {
@@ -87,26 +99,15 @@ const LosingPagesTable: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
-  const TableSkeleton = () => (
-    <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 animate-pulse">
-      <div className="h-8 bg-gray-700 rounded mb-4"></div>
-      <div className="space-y-2">
-        <div className="h-6 bg-gray-700 rounded"></div>
-        <div className="h-6 bg-gray-700 rounded"></div>
-        <div className="h-6 bg-gray-700 rounded"></div>
-      </div>
-    </div>
-  );
-
-  if (loading) return <TableSkeleton />;
+  // R2 & R3: Loading and Error states
   if (error) return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
 
   return (
     <section>
       <h2 className='text-xl font-semibold text-white mb-4'>Top Losing Pages</h2>
-      <div className="bg-gray-800 rounded-lg overflow-x-auto border border-gray-700">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-x-auto">
         <table className="min-w-full">
-          <thead className="bg-gray-700/50">
+          <thead className="border-b border-gray-700">
             <tr>
               <SortableHeader title="Page URL" columnKey="page" sortConfig={sortConfig} requestSort={requestSort} />
               <SortableHeader title="Previous Clicks" columnKey="previousClicks" sortConfig={sortConfig} requestSort={requestSort} />
@@ -114,12 +115,21 @@ const LosingPagesTable: React.FC = () => {
               <SortableHeader title="Change %" columnKey="changePercentage" sortConfig={sortConfig} requestSort={requestSort} />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-700">
-            {sortedData.length === 0 ? (
+          <tbody>
+            {loading ? (
+              <>
+                <TableRowSkeleton />
+                <TableRowSkeleton />
+                <TableRowSkeleton />
+                <TableRowSkeleton />
+                <TableRowSkeleton />
+              </>
+            ) : sortedData.length === 0 ? (
+              // R5: Empty state
               <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No pages with significant traffic loss found.</td></tr>
             ) : (
               sortedData.map((item) => (
-                <tr key={item.page} className="hover:bg-gray-700/50 transition-colors duration-200">
+                <tr key={item.page} className="border-b border-gray-700 last:border-b-0 hover:bg-gray-700/50 transition-colors duration-200">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{item.page}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.previousClicks.toLocaleString()}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.currentClicks.toLocaleString()}</td>

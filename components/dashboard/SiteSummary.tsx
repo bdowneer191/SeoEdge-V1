@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ICONS } from '@/components/icons';
 
+// R1: Define TypeScript interfaces
 interface SiteMetric {
   date: string;
   clicks: number;
@@ -18,17 +20,26 @@ interface SummaryStats {
   averagePosition: number;
 }
 
-const StatCard = ({ title, value }: { title: string; value: string | number }) => (
-  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-    <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
-    <p className="mt-2 text-3xl font-bold text-white">{value}</p>
+// Updated StatCard to accept an icon
+const StatCard = ({ title, value, icon }: { title: string; value: string | number; icon: React.ReactNode }) => (
+  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 flex items-center space-x-4">
+    <div className="bg-gray-700 p-3 rounded-full">
+      {icon}
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
+      <p className="mt-1 text-3xl font-bold text-white">{value}</p>
+    </div>
   </div>
 );
 
 const StatCardSkeleton = () => (
-  <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 animate-pulse">
-    <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-    <div className="h-8 bg-gray-700 rounded w-1/2 mt-3"></div>
+  <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 animate-pulse flex items-center space-x-4">
+    <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
+    <div className="flex-1">
+      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+      <div className="h-8 bg-gray-700 rounded w-1/2 mt-2"></div>
+    </div>
   </div>
 );
 
@@ -74,17 +85,15 @@ const SiteSummary: React.FC = () => {
     fetchData();
   }, []);
 
+  // R3: Skeleton loader state
   if (loading) {
     return (
-      <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-        <div className="bg-gray-800 rounded-lg p-6 mt-8 h-96 border border-gray-700 animate-pulse"></div>
-      </>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCardSkeleton />
+        <StatCardSkeleton />
+        <StatCardSkeleton />
+        <StatCardSkeleton />
+      </div>
     );
   }
 
@@ -94,14 +103,16 @@ const SiteSummary: React.FC = () => {
 
   return (
     <>
+      {/* R4: Render four StatCard components with icons */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Clicks" value={summary?.totalClicks.toLocaleString() ?? 'N/A'} />
-        <StatCard title="Total Impressions" value={summary?.totalImpressions.toLocaleString() ?? 'N/A'} />
-        <StatCard title="Average CTR" value={summary ? `${(summary.averageCtr * 100).toFixed(2)}%` : 'N/A'} />
-        <StatCard title="Average Position" value={summary ? summary.averagePosition.toFixed(1) : 'N/A'} />
+        <StatCard title="Total Clicks" value={summary?.totalClicks.toLocaleString() ?? 'N/A'} icon={ICONS.CLICKS} />
+        <StatCard title="Total Impressions" value={summary?.totalImpressions.toLocaleString() ?? 'N/A'} icon={ICONS.IMPRESSIONS} />
+        <StatCard title="Average CTR" value={summary ? `${(summary.averageCtr * 100).toFixed(2)}%` : 'N/A'} icon={ICONS.CTR} />
+        <StatCard title="Average Position" value={summary ? summary.averagePosition.toFixed(1) : 'N/A'} icon={ICONS.POSITION} />
       </div>
 
-      <div className="bg-gray-800 rounded-lg p-6 mt-8 h-96 border border-gray-700">
+      {/* R5 & Styling Guide: Render LineChart */}
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
@@ -109,8 +120,8 @@ const SiteSummary: React.FC = () => {
             <YAxis tick={{ fill: '#9ca3af' }} />
             <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.9)', border: '1px solid #4b5563', color: '#e5e7eb' }} />
             <Legend wrapperStyle={{ color: '#e5e7eb' }}/>
-            <Line type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Clicks" />
-            <Line type="monotone" dataKey="impressions" stroke="#22c55e" strokeWidth={2} dot={false} name="Impressions" />
+            <Line type="monotone" dataKey="clicks" stroke="#6a5acd" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Clicks" />
+            <Line type="monotone" dataKey="impressions" stroke="#8a7aff" strokeWidth={2} dot={false} name="Impressions" />
           </LineChart>
         </ResponsiveContainer>
       </div>
