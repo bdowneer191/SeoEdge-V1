@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import React from 'react';
+import './globals.css'; // Make sure you have a globals.css file for base styles
 
-// Metadata is not actively used in this single-page app setup, but kept for file structure consistency.
 export const metadata: Metadata = {
   title: 'SeoEdge',
   description: 'AI-powered SEO analytics tool to diagnose and recover organic traffic.',
@@ -12,11 +12,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // This component now acts as a simple wrapper. The <html> and <body> tags are in index.html.
-  // The background color is applied to a div to ensure it covers the viewport.
   return (
-    <div className="bg-gray-50 min-h-screen">
-      {children}
-    </div>
+    <html lang="en">
+      <body className="bg-gray-50">{children}</body>
+    </html>
   );
 }
