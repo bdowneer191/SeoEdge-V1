@@ -1,28 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import * as admin from 'firebase-admin';
-import { Buffer } from 'node:buffer';
+import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 
-// --- Firebase Initialization ---
-function initializeFirebase() {
-  if (admin.apps.length > 0) {
-    return admin.firestore();
-  }
-
-  const serviceAccountBase64 = process.env.FIREBASE_ADMIN_SDK_JSON_BASE64;
-  if (!serviceAccountBase64) {
-    throw new Error('FIREBASE_ADMIN_SDK_JSON_BASE64 env variable not set.');
-  }
-  const serviceAccountJson = Buffer.from(serviceAccountBase64, 'base64').toString('ascii');
-  const serviceAccount = JSON.parse(serviceAccountJson);
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-
-  return admin.firestore();
-}
-// --- End Firebase Initialization ---
+export const dynamic = 'force-dynamic'; // Force dynamic rendering
 
 interface SiteMetric {
     date: string;
@@ -50,7 +30,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Dates must be in YYYY-MM-DD format.' }, { status: 400 });
     }
 
-    const firestore = initializeFirebase();
+    const firestore = initializeFirebaseAdmin();
     const snapshot = await firestore.collection('analytics_agg')
       .where('date', '>=', startDate)
       .where('date', '<=', endDate)
