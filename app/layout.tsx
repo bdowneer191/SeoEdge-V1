@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import React from 'react';
 import './globals.css'; // Make sure you have a globals.css file for base styles
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export const metadata: Metadata = {
   title: 'SeoEdge',
@@ -14,7 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50">{children}</body>
+      <body>
+        <DashboardLayout>{children}</DashboardLayout>
+      </body>
     </html>
   );
 }
