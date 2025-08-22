@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <>
       <Header />
-      <div className="space-y-8 mt-8">
+      <div className="space-y-8">
         <SiteSummary />
         <LosingPagesTable />
       </div>
