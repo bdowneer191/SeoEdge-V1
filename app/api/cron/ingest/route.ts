@@ -30,12 +30,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 2. Calculate yesterday's date
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const year = yesterday.getFullYear();
-    const month = String(yesterday.getMonth() + 1).padStart(2, '0');
-    const day = String(yesterday.getDate()).padStart(2, '0');
+    // 2. Calculate the date for 3 days ago to account for GSC data delay
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() - 3);
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
     const formattedDate = `${year}-${month}-${day}`;
 
     const siteUrl = 'sc-domain:hypefresh.com';
