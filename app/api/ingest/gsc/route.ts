@@ -7,7 +7,9 @@ import { GSCIngestionService } from '@/services/ingestion/GSCIngestionService';
  * This endpoint should be protected by an authentication mechanism.
  */
 export async function POST(request: NextRequest) {
+    console.log('[GSC Ingestion] API route hit.');
     try {
+        console.log('[GSC Ingestion] Parsing request body...');
         const body = await request.json();
         const { siteUrl, startDate, endDate } = body;
 
