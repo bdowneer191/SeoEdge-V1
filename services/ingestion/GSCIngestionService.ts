@@ -100,9 +100,10 @@ export class GSCIngestionService {
    * @param siteUrl The URL of the GSC property.
    * @param startDate The start date in YYYY-MM-DD format.
    * @param endDate The end date in YYYY-MM-DD format.
+   * @param searchType Optional search type (e.g., 'web', 'image', 'news').
    */
-  public async ingestData(siteUrl: string, startDate: string, endDate: string): Promise<void> {
-    console.log(`Starting GSC data ingestion for ${siteUrl} from ${startDate} to ${endDate}.`);
+  public async ingestData(siteUrl: string, startDate: string, endDate: string, searchType?: string): Promise<void> {
+    console.log(`Starting GSC data ingestion for ${siteUrl} (${searchType || 'all types'}) from ${startDate} to ${endDate}.`);
 
     let startRow = 0;
     let totalRowsFetched = 0;
@@ -112,15 +113,22 @@ export class GSCIngestionService {
 
     while (hasMoreData) {
       console.log(`Fetching rows starting from ${startRow}...`);
+
+      const requestBody: any = {
+        startDate,
+        endDate,
+        dimensions: ['date', 'query', 'page', 'device', 'country'],
+        rowLimit: GSC_ROW_LIMIT,
+        startRow,
+      };
+
+      if (searchType) {
+        requestBody.searchType = searchType;
+      }
+
       const request = {
         siteUrl,
-        requestBody: {
-          startDate,
-          endDate,
-          dimensions: ['date', 'query', 'page', 'device', 'country'],
-          rowLimit: GSC_ROW_LIMIT,
-          startRow,
-        },
+        requestBody,
       };
 
       const response = await this.fetchWithRetry(request);
