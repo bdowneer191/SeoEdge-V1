@@ -10,11 +10,23 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: NextRequest) {
   // 1. Authenticate the request
-  const authHeader = request.headers.get('authorization');
+  const userAgent = request.headers.get('user-agent');
+  if (userAgent !== 'vercel-cron/1.0') {
+    // This check ensures the request is coming from Vercel's cron service.
+    return NextResponse.json({ error: 'Unauthorized: Invalid user-agent.' }, { status: 401 });
+  }
+
+  const secret = request.nextUrl.searchParams.get('secret');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!cronSecret) {
+    // This is a server configuration error. The cron secret is not set.
+    console.error('[Cron Job] CRON_SECRET environment variable is not set.');
+    return NextResponse.json({ error: 'Internal Server Error: Cron secret not configured.' }, { status: 500 });
+  }
+
+  if (secret !== cronSecret) {
+    return NextResponse.json({ error: 'Unauthorized: Invalid secret.' }, { status: 401 });
   }
 
   try {
