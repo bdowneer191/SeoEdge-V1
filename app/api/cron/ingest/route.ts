@@ -30,37 +30,33 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 2. Calculate the date for 3 days ago to account for GSC data delay
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() - 3);
-    const year = targetDate.getFullYear();
-    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const day = String(targetDate.getDate()).padStart(2, '0');
-    const formattedDate = `${year}-${month}-${day}`;
-
+    const testStartDate = '2025-08-22';
+    const testEndDate = '2025-08-22';
+    const searchTypes = ['web', 'image', 'video', 'news'];
     const siteUrl = 'sc-domain:hypefresh.com';
 
-    // 3. Run the ingestion service
-    console.log(`[Cron Job] Starting GSC data ingestion for ${siteUrl} for date ${formattedDate}.`);
+    console.log(`[Cron Job] Starting specific test for date: ${testStartDate}`);
+
     const ingestionService = new GSCIngestionService();
 
-    // Await the ingestion process, as this is a background job
-    await ingestionService.ingestData(siteUrl, formattedDate, formattedDate);
+    for (const searchType of searchTypes) {
+      console.log(`[Cron Job] --- Fetching '${searchType}' data... ---`);
+      await ingestionService.ingestData(siteUrl, testStartDate, testEndDate, searchType);
+    }
 
-    console.log(`[Cron Job] GSC ingestion job completed successfully for ${siteUrl}.`);
+    console.log(`[Cron Job] GSC ingestion test completed successfully for all search types.`);
 
-    // 4. Return a success response
     return NextResponse.json({
       status: 'success',
-      message: `Ingestion job completed for ${formattedDate}.`,
+      message: `Ingestion test completed for all search types for date ${testStartDate}.`,
     });
 
   } catch (error) {
-    console.error('[Cron Job] GSC ingestion job failed:', error);
+    console.error('[Cron Job] GSC ingestion test failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
     return NextResponse.json({
       status: 'error',
-      message: 'Ingestion job failed.',
+      message: 'Ingestion test failed.',
       details: errorMessage
     }, { status: 500 });
   }
