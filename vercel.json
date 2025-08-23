@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/ingest?secret=YOUR_CRON_SECRET",
+      "path": "/api/cron/ingest?secret=1Kk8_ArD8PL5",
       "schedule": "0 0 * * *"
     }
   ]
