@@ -17,11 +17,11 @@ export async function GET(request: NextRequest) {
   }
 
   const secret = request.nextUrl.searchParams.get('secret');
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.ADMIN_SHARED_SECRET;
 
   if (!cronSecret) {
     // This is a server configuration error. The cron secret is not set.
-    console.error('[Cron Job] CRON_SECRET environment variable is not set.');
+    console.error('[Cron Job] ADMIN_SHARED_SECRET environment variable is not set.');
     return NextResponse.json({ error: 'Internal Server Error: Cron secret not configured.' }, { status: 500 });
   }
 
