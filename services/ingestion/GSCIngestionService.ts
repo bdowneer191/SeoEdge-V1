@@ -124,6 +124,7 @@ export class GSCIngestionService {
       };
 
       const response = await this.fetchWithRetry(request);
+      console.log('GSC API response data:', JSON.stringify(response.data, null, 2));
       const rows = response.data.rows;
       console.log(`Received ${rows ? rows.length : 0} rows from GSC.`);
 
