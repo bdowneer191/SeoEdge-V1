@@ -125,6 +125,7 @@ export class GSCIngestionService {
 
       const response = await this.fetchWithRetry(request);
       const rows = response.data.rows;
+      console.log(`Received ${rows ? rows.length : 0} rows from GSC.`);
 
       if (!rows || rows.length === 0) {
         hasMoreData = false;
