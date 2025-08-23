@@ -88,7 +88,8 @@ export class GSCIngestionService {
         throw error;
       }
       const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-      console.warn(`GSC API call failed (attempt ${attempt}). Retrying in ${Math.round(delay/1000)}s...`);
+      // Log the detailed error object from the Google API client.
+      console.warn(`GSC API call failed (attempt ${attempt}). Retrying in ${Math.round(delay/1000)}s... Error:`, error);
       await new Promise(resolve => setTimeout(resolve, delay));
       return this.fetchWithRetry(request, attempt + 1, maxAttempts);
     }
