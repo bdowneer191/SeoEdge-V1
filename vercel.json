@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/ingest",
+      "schedule": "0 0 * * *",
+      "authorization": "Bearer YOUR_CRON_SECRET"
+    }
+  ]
+}
