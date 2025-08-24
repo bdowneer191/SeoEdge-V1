@@ -20,26 +20,45 @@ interface SummaryStats {
   averagePosition: number;
 }
 
-// Updated StatCard to accept an icon
-const StatCard = ({ title, value, icon }: { title: string; value: string | number; icon: React.ReactNode }) => (
-  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 flex items-center space-x-4">
-    <div className="bg-gray-700 p-3 rounded-full">
-      {icon}
+// Trend data format for sparklines
+interface TrendData {
+  value: number;
+}
+
+// Updated StatCard to accept an icon and trendData
+const StatCard = ({ title, value, icon, trendData }: { title: string; value: string | number; icon: React.ReactNode; trendData?: TrendData[] }) => (
+  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+    <div className="flex items-center space-x-4">
+        <div className="bg-gray-700 p-3 rounded-full">
+        {icon}
+        </div>
+        <div>
+        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
+        <p className="mt-1 text-3xl font-bold text-white">{value}</p>
+        </div>
     </div>
-    <div>
-      <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
-      <p className="mt-1 text-3xl font-bold text-white">{value}</p>
-    </div>
+    {trendData && (
+        <div className="mt-4 h-10">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData}>
+                    <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={2} dot={false} />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    )}
   </div>
 );
 
 const StatCardSkeleton = () => (
-  <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 animate-pulse flex items-center space-x-4">
-    <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
-    <div className="flex-1">
-      <div className="h-4 bg-gray-700 rounded w-3/4"></div>
-      <div className="h-8 bg-gray-700 rounded w-1/2 mt-2"></div>
+  <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 animate-pulse">
+    <div className="flex items-center space-x-4">
+        <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
+        <div className="flex-1">
+        <div className="h-4 bg-gray-700 rounded w-3/4"></div>
+        <div className="h-8 bg-gray-700 rounded w-1/2 mt-2"></div>
+        </div>
     </div>
+    <div className="mt-4 h-10 bg-gray-700 rounded"></div>
   </div>
 );
 
@@ -48,6 +67,8 @@ const SiteSummary: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
+  // State for trend data
+  const [trends, setTrends] = useState<{ [key: string]: TrendData[] }>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -65,6 +86,7 @@ const SiteSummary: React.FC = () => {
         setData(result);
 
         if (result.length > 0) {
+          // Calculate summary stats
           const totalClicks = result.reduce((acc, item) => acc + item.clicks, 0);
           const totalImpressions = result.reduce((acc, item) => acc + item.impressions, 0);
           const weightedPositionSum = result.reduce((sum, item) => sum + (item.position * item.impressions), 0);
@@ -74,6 +96,14 @@ const SiteSummary: React.FC = () => {
             totalImpressions,
             averageCtr: totalImpressions > 0 ? (totalClicks / totalImpressions) : 0,
             averagePosition: totalImpressions > 0 ? (weightedPositionSum / totalImpressions) : 0,
+          });
+
+          // Prepare trend data
+          setTrends({
+            clicksTrend: result.map(item => ({ value: item.clicks })),
+            impressionsTrend: result.map(item => ({ value: item.impressions })),
+            ctrTrend: result.map(item => ({ value: item.ctr })),
+            positionTrend: result.map(item => ({ value: item.position })),
           });
         }
       } catch (e) {
@@ -85,7 +115,6 @@ const SiteSummary: React.FC = () => {
     fetchData();
   }, []);
 
-  // R3: Skeleton loader state
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -103,15 +132,13 @@ const SiteSummary: React.FC = () => {
 
   return (
     <>
-      {/* R4: Render four StatCard components with icons */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Clicks" value={summary?.totalClicks.toLocaleString() ?? 'N/A'} icon={ICONS.CLICKS} />
-        <StatCard title="Total Impressions" value={summary?.totalImpressions.toLocaleString() ?? 'N/A'} icon={ICONS.IMPRESSIONS} />
-        <StatCard title="Average CTR" value={summary ? `${(summary.averageCtr * 100).toFixed(2)}%` : 'N/A'} icon={ICONS.CTR} />
-        <StatCard title="Average Position" value={summary ? summary.averagePosition.toFixed(1) : 'N/A'} icon={ICONS.POSITION} />
+        <StatCard title="Total Clicks" value={summary?.totalClicks.toLocaleString() ?? 'N/A'} icon={ICONS.CLICKS} trendData={trends.clicksTrend} />
+        <StatCard title="Total Impressions" value={summary?.totalImpressions.toLocaleString() ?? 'N/A'} icon={ICONS.IMPRESSIONS} trendData={trends.impressionsTrend} />
+        <StatCard title="Average CTR" value={summary ? `${(summary.averageCtr * 100).toFixed(2)}%` : 'N/A'} icon={ICONS.CTR} trendData={trends.ctrTrend} />
+        <StatCard title="Average Position" value={summary ? summary.averagePosition.toFixed(1) : 'N/A'} icon={ICONS.POSITION} trendData={trends.positionTrend} />
       </div>
 
-      {/* R5 & Styling Guide: Render LineChart */}
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>

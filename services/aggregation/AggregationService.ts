@@ -89,40 +89,69 @@ export class AggregationService {
   }
 
   /**
-   * Reads raw GSC data for a given date, computes daily aggregates, and saves them to Firestore.
+   * Reads raw GSC data for a given date in batches, computes daily aggregates,
+   * and saves them to Firestore to avoid high read counts.
    * @param date The date to process in YYYY-MM-DD format.
    */
   public async aggregateData(date: string): Promise<void> {
     console.log(`Starting aggregation for date: ${date}`);
 
-    const snapshot = await this.firestore.collection(FIRESTORE_GSC_RAW_COLLECTION).where('date', '==', date).get();
-
-    if (snapshot.empty) {
-      console.log(`No data found for ${date}. Exiting.`);
-      return;
-    }
-
     const siteAccumulator = new MetricsAccumulator();
     const countryAccumulators: { [key: string]: MetricsAccumulator } = {};
     const deviceAccumulators: { [key: string]: MetricsAccumulator } = {};
     let siteUrl: string | null = null;
+    let lastVisible: admin.firestore.QueryDocumentSnapshot | null = null;
+    let totalDocsProcessed = 0;
+    const batchLimit = 1000;
 
-    snapshot.docs.forEach(doc => {
-      const row = doc.data() as GscRawData;
-      if (!siteUrl) siteUrl = row.siteUrl;
+    while (true) {
+      let query = this.firestore.collection(FIRESTORE_GSC_RAW_COLLECTION)
+        .where('date', '==', date)
+        .orderBy(admin.firestore.FieldPath.documentId()) // Order by doc ID for stable pagination
+        .limit(batchLimit);
 
-      siteAccumulator.add(row);
-
-      if (!countryAccumulators[row.country]) {
-        countryAccumulators[row.country] = new MetricsAccumulator();
+      if (lastVisible) {
+        query = query.startAfter(lastVisible);
       }
-      countryAccumulators[row.country].add(row);
 
-      if (!deviceAccumulators[row.device]) {
-        deviceAccumulators[row.device] = new MetricsAccumulator();
+      const snapshot = await query.get();
+
+      if (snapshot.empty) {
+        // No more documents to process
+        break;
       }
-      deviceAccumulators[row.device].add(row);
-    });
+
+      snapshot.docs.forEach(doc => {
+        const row = doc.data() as GscRawData;
+        if (!siteUrl) siteUrl = row.siteUrl;
+
+        siteAccumulator.add(row);
+
+        if (!countryAccumulators[row.country]) {
+          countryAccumulators[row.country] = new MetricsAccumulator();
+        }
+        countryAccumulators[row.country].add(row);
+
+        if (!deviceAccumulators[row.device]) {
+          deviceAccumulators[row.device] = new MetricsAccumulator();
+        }
+        deviceAccumulators[row.device].add(row);
+      });
+
+      totalDocsProcessed += snapshot.size;
+      lastVisible = snapshot.docs[snapshot.docs.length - 1];
+      console.log(`Processed batch of ${snapshot.size} documents. Total processed: ${totalDocsProcessed}`);
+
+      // If we fetched fewer docs than the limit, we're on the last page
+      if (snapshot.size < batchLimit) {
+        break;
+      }
+    }
+
+    if (totalDocsProcessed === 0) {
+      console.log(`No data found for ${date}. Exiting.`);
+      return;
+    }
 
     if (!siteUrl) {
         console.warn('No siteUrl found in the raw data. Cannot save aggregate.');
@@ -144,6 +173,6 @@ export class AggregationService {
     const docId = `daily_${date.replace(/-/g, '')}`;
     await this.firestore.collection(FIRESTORE_ANALYTICS_AGG_COLLECTION).doc(docId).set(finalData);
 
-    console.log(`✅ Aggregation complete for ${date}. Wrote ${snapshot.size} rows summary to ${FIRESTORE_ANALYTICS_AGG_COLLECTION}/${docId}.`);
+    console.log(`✅ Aggregation complete for ${date}. Wrote ${totalDocsProcessed} rows summary to ${FIRESTORE_ANALYTICS_AGG_COLLECTION}/${docId}.`);
   }
 }
