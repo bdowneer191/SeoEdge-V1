@@ -4,88 +4,72 @@ import type { NextRequest } from 'next/server';
 import * as admin from 'firebase-admin';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 
-export const dynamic = 'force-dynamic'; // Force this route to be dynamic
+export const dynamic = 'force-dynamic';
 
-interface PageLoss {
-  page: string;
-  previousClicks: number;
-  currentClicks: number;
-  changePercentage: number;
-}
-
-async function getAggregatedClicksByPage(firestore: admin.firestore.Firestore, startDate: string, endDate: string): Promise<Map<string, number>> {
-  const snapshot = await firestore.collection('gsc_raw')
+/**
+ * Queries the pre-aggregated analytics collection to get the total number of clicks
+ * for a site within a specific date range.
+ * @param firestore The Firestore database instance.
+ * @param siteUrl The URL of the site to query for.
+ * @param startDate The start date of the period in YYYY-MM-DD format.
+ * @param endDate The end date of the period in YYYY-MM-DD format.
+ * @returns A promise that resolves to the total number of clicks.
+ */
+async function getSiteWideClicks(firestore: admin.firestore.Firestore, siteUrl: string, startDate: string, endDate: string): Promise<number> {
+  const snapshot = await firestore.collection('analytics_agg')
+    .where('siteUrl', '==', siteUrl)
     .where('date', '>=', startDate)
     .where('date', '<=', endDate)
-    .select('page', 'clicks')
+    .select('totalClicks')
     .get();
-  
-  const clicksMap = new Map<string, number>();
+
   if (snapshot.empty) {
-    return clicksMap;
+    return 0;
   }
 
+  let totalClicks = 0;
   snapshot.docs.forEach(doc => {
-    const data = doc.data();
-    const page = data.page as string;
-    const clicks = data.clicks as number;
-    clicksMap.set(page, (clicksMap.get(page) || 0) + clicks);
+    totalClicks += doc.data().totalClicks as number;
   });
   
-  return clicksMap;
+  return totalClicks;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const siteUrl = searchParams.get('siteUrl');
     const currentStartDate = searchParams.get('currentStartDate');
     const currentEndDate = searchParams.get('currentEndDate');
     const previousStartDate = searchParams.get('previousStartDate');
     const previousEndDate = searchParams.get('previousEndDate');
-    const thresholdStr = searchParams.get('threshold');
 
-    if (!currentStartDate || !currentEndDate || !previousStartDate || !previousEndDate || !thresholdStr) {
-      return NextResponse.json({ error: 'Missing one or more required parameters.' }, { status: 400 });
-    }
-
-    const threshold = parseFloat(thresholdStr);
-    if (isNaN(threshold) || threshold < 0 || threshold > 1) {
-        return NextResponse.json({ error: 'Threshold must be a number between 0 and 1.' }, { status: 400 });
+    if (!siteUrl || !currentStartDate || !currentEndDate || !previousStartDate || !previousEndDate) {
+      return NextResponse.json({ error: 'Missing one or more required parameters: siteUrl, currentStartDate, currentEndDate, previousStartDate, previousEndDate.' }, { status: 400 });
     }
 
     const firestore = initializeFirebaseAdmin();
 
-    const [currentClicksMap, previousClicksMap] = await Promise.all([
-      getAggregatedClicksByPage(firestore, currentStartDate, currentEndDate),
-      getAggregatedClicksByPage(firestore, previousStartDate, previousEndDate),
+    const [currentPeriodClicks, previousPeriodClicks] = await Promise.all([
+      getSiteWideClicks(firestore, siteUrl, currentStartDate, currentEndDate),
+      getSiteWideClicks(firestore, siteUrl, previousStartDate, previousEndDate),
     ]);
 
-    const results: PageLoss[] = [];
+    const changePercentage = previousPeriodClicks === 0
+      ? (currentPeriodClicks > 0 ? 100.0 : 0.0)
+      : ((currentPeriodClicks - previousPeriodClicks) / previousPeriodClicks) * 100;
 
-    previousClicksMap.forEach((previousClicks, page) => {
-      const currentClicks = currentClicksMap.get(page) || 0;
-      
-      if (previousClicks === 0) return;
+    const response = {
+      previousPeriodClicks,
+      currentPeriodClicks,
+      changePercentage,
+    };
 
-      const change = (currentClicks - previousClicks) / previousClicks;
-      
-      if (change < 0 && Math.abs(change) > threshold) {
-        results.push({
-          page,
-          previousClicks,
-          currentClicks,
-          changePercentage: change * 100,
-        });
-      }
-    });
-
-    results.sort((a, b) => a.changePercentage - b.changePercentage);
-
-    return NextResponse.json(results, { status: 200 });
+    return NextResponse.json(response, { status: 200 });
 
   } catch (error) {
-    console.error('Error fetching page losses:', error);
+    console.error('Error fetching site-wide click losses:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    return NextResponse.json({ error: 'Failed to fetch page losses.', details: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch site-wide click losses.', details: errorMessage }, { status: 500 });
   }
 }
