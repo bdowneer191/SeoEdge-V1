@@ -15,8 +15,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized: Invalid user-agent.' }, { status: 401 });
   }
 
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.split(' ')[1];
+  const secret = request.nextUrl.searchParams.get('secret');
   const cronSecret = process.env.ADMIN_SHARED_SECRET;
 
   if (!cronSecret) {
@@ -24,8 +23,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error: Cron secret not configured.' }, { status: 500 });
   }
 
-  if (token !== cronSecret) {
-    return NextResponse.json({ error: 'Unauthorized: Invalid token.' }, { status: 401 });
+  if (secret !== cronSecret) {
+    return NextResponse.json({ error: 'Unauthorized: Invalid secret.' }, { status: 401 });
   }
 
   try {
