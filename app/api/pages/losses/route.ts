@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  * @param endDate The end date of the period in YYYY-MM-DD format.
  * @returns A promise that resolves to the total number of clicks.
  */
-async function getSiteWideClicks(firestore: admin.firestore.Firestore, siteUrl: string, startDate: string, endDate: string): Promise<number> {
+async function getTotalClicksForPeriod(firestore: admin.firestore.Firestore, siteUrl: string, startDate: string, endDate: string): Promise<number> {
   const snapshot = await firestore.collection('analytics_agg')
     .where('siteUrl', '==', siteUrl)
     .where('date', '>=', startDate)
@@ -50,18 +50,18 @@ export async function GET(request: NextRequest) {
 
     const firestore = initializeFirebaseAdmin();
 
-    const [currentPeriodClicks, previousPeriodClicks] = await Promise.all([
-      getSiteWideClicks(firestore, siteUrl, currentStartDate, currentEndDate),
-      getSiteWideClicks(firestore, siteUrl, previousStartDate, previousEndDate),
+    const [currentClicks, previousClicks] = await Promise.all([
+      getTotalClicksForPeriod(firestore, siteUrl, currentStartDate, currentEndDate),
+      getTotalClicksForPeriod(firestore, siteUrl, previousStartDate, previousEndDate),
     ]);
 
-    const changePercentage = previousPeriodClicks === 0
-      ? (currentPeriodClicks > 0 ? 100.0 : 0.0)
-      : ((currentPeriodClicks - previousPeriodClicks) / previousPeriodClicks) * 100;
+    const changePercentage = previousClicks === 0
+      ? (currentClicks > 0 ? 100.0 : 0.0)
+      : ((currentClicks - previousClicks) / previousClicks) * 100;
 
     const response = {
-      previousPeriodClicks,
-      currentPeriodClicks,
+      previousClicks,
+      currentClicks,
       changePercentage,
     };
 
