@@ -21,6 +21,18 @@ const FIRESTORE_COLLECTION = 'gsc_raw';
 const FIRESTORE_BATCH_SIZE = 500;
 const GSC_ROW_LIMIT = 25000; // Max rows per API request
 
+// Copied from AggregationService - this will be the new home for this interface
+export interface AnalyticsAggData {
+  date: string;
+  siteUrl: string;
+  totalClicks: number;
+  totalImpressions: number;
+  averageCtr: number;
+  averagePosition: number;
+  aggregatesByCountry: { [country: string]: any }; // simplified for this context
+  aggregatesByDevice: { [device: string]: any }; // simplified for this context
+}
+
 /**
  * Service to handle ingestion of Google Search Console data into Firestore.
  */
@@ -184,5 +196,67 @@ export class GSCIngestionService {
     }
 
     console.log(`✅ Ingestion complete. Fetched and wrote ${totalRowsFetched} rows to ${FIRESTORE_COLLECTION}.`);
+  }
+
+  /**
+   * Fetches the daily aggregated summary for a site and persists it to Firestore.
+   * This is a highly efficient way to get daily totals without processing raw data.
+   * @param siteUrl The URL of the GSC property.
+   * @param date The date to fetch the summary for, in YYYY-MM-DD format.
+   */
+  public async ingestDailySummary(siteUrl: string, date: string): Promise<void> {
+    console.log(`Starting GSC daily summary ingestion for ${siteUrl} on ${date}.`);
+
+    const requestBody = {
+      startDate: date,
+      endDate: date,
+      dimensions: ['date'],
+    };
+
+    const request = {
+      siteUrl,
+      requestBody,
+    };
+
+    const response = await this.fetchWithRetry(request);
+    const rows = response.data.rows;
+
+    if (!rows || rows.length === 0) {
+      console.log(`No summary data found for ${siteUrl} on ${date}.`);
+      // It's possible there was no traffic. We'll write a zero-metrics document
+      // to signify that the day has been processed.
+      const zeroData: AnalyticsAggData = {
+        date,
+        siteUrl,
+        totalClicks: 0,
+        totalImpressions: 0,
+        averageCtr: 0,
+        averagePosition: 0,
+        aggregatesByCountry: {},
+        aggregatesByDevice: {},
+      };
+      const docId = `daily_${date.replace(/-/g, '')}_${siteUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      await this.firestore.collection('analytics_agg').doc(docId).set(zeroData);
+      console.log(`Wrote zero-metrics summary for ${date}.`);
+      return;
+    }
+
+    const summary = rows[0];
+    const docData: AnalyticsAggData = {
+      date: summary.keys[0],
+      siteUrl,
+      totalClicks: summary.clicks,
+      totalImpressions: summary.impressions,
+      averageCtr: summary.ctr,
+      averagePosition: summary.position,
+      // The simple aggregated query doesn't include per-country/device breakdowns.
+      aggregatesByCountry: {},
+      aggregatesByDevice: {},
+    };
+
+    const docId = `daily_${docData.date.replace(/-/g, '')}_${siteUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    await this.firestore.collection('analytics_agg').doc(docId).set(docData);
+
+    console.log(`✅ Daily summary ingestion complete for ${date}. Wrote summary to analytics_agg/${docId}.`);
   }
 }
