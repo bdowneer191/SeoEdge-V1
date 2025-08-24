@@ -1,50 +1,31 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 
-// Interfaces
-interface PageLoss {
-  page: string;
+// Interface for the new API response
+interface SiteWideChange {
   previousClicks: number;
   currentClicks: number;
   changePercentage: number;
 }
-type SortKey = keyof PageLoss;
-type SortDirection = 'ascending' | 'descending';
-interface SortConfig {
-  key: SortKey;
-  direction: SortDirection;
-}
 
 // Sub-components
-const SortableHeader = ({ title, columnKey, sortConfig, requestSort }: { title: string, columnKey: SortKey, sortConfig: SortConfig | null, requestSort: (key: SortKey) => void }) => {
-  const isSorted = sortConfig?.key === columnKey;
-  const arrow = isSorted ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '';
-  return (
-    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer" onClick={() => requestSort(columnKey)}>
-      {title} <span className="ml-1">{arrow}</span>
-    </th>
-  );
-};
-
-const TableRowSkeleton = () => (
-  <tr className="animate-pulse">
-    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-full"></div></td>
-    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
-    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
-    <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
-  </tr>
+const StatCardSkeleton = () => (
+  <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 animate-pulse">
+    <div className="h-8 bg-gray-700 rounded w-1/4 mb-2"></div>
+    <div className="h-16 bg-gray-700 rounded w-1/2 mb-4"></div>
+    <div className="h-6 bg-gray-700 rounded w-3/4"></div>
+  </div>
 );
 
 // Main Component
-const LosingPagesTable: React.FC = () => {
-  const [data, setData] = useState<PageLoss[]>([]);
+const SiteWideStatCard: React.FC = () => {
+  const [data, setData] = useState<SiteWideChange | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'changePercentage', direction: 'ascending' });
 
   useEffect(() => {
-    // R2: Fetch data
     const fetchData = async () => {
       try {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
@@ -57,17 +38,21 @@ const LosingPagesTable: React.FC = () => {
         const previousStart = new Date(previousEnd);
         previousStart.setDate(previousEnd.getDate() - 28);
 
+        // The API now needs a siteUrl. I'll hardcode the one from the cron job for now.
+        // In a real app, this would likely come from props or context.
+        const siteUrl = 'sc-domain:hypefresh.com';
+
         const params = new URLSearchParams({
+          siteUrl,
           currentStartDate: formatDate(currentStart),
           currentEndDate: formatDate(currentEnd),
           previousStartDate: formatDate(previousStart),
           previousEndDate: formatDate(previousEnd),
-          threshold: '0.3',
         });
 
         const response = await fetch(`/api/pages/losses?${params}`);
         if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        const result: PageLoss[] = await response.json();
+        const result: SiteWideChange = await response.json();
         setData(result);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'An unknown error occurred');
@@ -78,70 +63,36 @@ const LosingPagesTable: React.FC = () => {
     fetchData();
   }, []);
 
-  // R4: Client-side sorting
-  const sortedData = useMemo(() => {
-    let sortableItems = [...data];
-    if (sortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
-        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sortableItems;
-  }, [data, sortConfig]);
-
-  const requestSort = (key: SortKey) => {
-    let direction: SortDirection = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  // R2 & R3: Loading and Error states
   if (error) return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
 
   return (
     <section>
-      <h2 className='text-xl font-semibold text-white mb-4'>Top Losing Pages</h2>
-      <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-x-auto">
-        <table className="min-w-full">
-          <thead className="border-b border-gray-700">
-            <tr>
-              <SortableHeader title="Page URL" columnKey="page" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader title="Previous Clicks" columnKey="previousClicks" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader title="Current Clicks" columnKey="currentClicks" sortConfig={sortConfig} requestSort={requestSort} />
-              <SortableHeader title="Change %" columnKey="changePercentage" sortConfig={sortConfig} requestSort={requestSort} />
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <>
-                <TableRowSkeleton />
-                <TableRowSkeleton />
-                <TableRowSkeleton />
-                <TableRowSkeleton />
-                <TableRowSkeleton />
-              </>
-            ) : sortedData.length === 0 ? (
-              // R5: Empty state
-              <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No pages with significant traffic loss found.</td></tr>
+      <h2 className='text-xl font-semibold text-white mb-4'>Site-Wide Click Change (Last 28 Days)</h2>
+      {loading ? (
+        <StatCardSkeleton />
+      ) : data ? (
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-medium text-gray-300">Change Percentage</h3>
+            {data.changePercentage >= 0 ? (
+              <ArrowUp className="w-5 h-5 text-green-500" />
             ) : (
-              sortedData.map((item) => (
-                <tr key={item.page} className="border-b border-gray-700 last:border-b-0 hover:bg-gray-700/50 transition-colors duration-200">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{item.page}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.previousClicks.toLocaleString()}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.currentClicks.toLocaleString()}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-red-400">{item.changePercentage.toFixed(1)}%</td>
-                </tr>
-              ))
+              <ArrowDown className="w-5 h-5 text-red-500" />
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <p className={`text-5xl font-bold ${data.changePercentage >= 0 ? 'text-green-500' : 'text-red-500'} mb-4`}>
+            {data.changePercentage.toFixed(1)}%
+          </p>
+          <div className="flex justify-between text-sm text-gray-400">
+            <span>Previous Period: {data.previousClicks.toLocaleString()} clicks</span>
+            <span>Current Period: {data.currentClicks.toLocaleString()} clicks</span>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-8 text-gray-400">No data available.</div>
+      )}
     </section>
   );
 };
 
-export default LosingPagesTable;
+export default SiteWideStatCard;
