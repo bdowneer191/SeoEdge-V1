@@ -2,22 +2,31 @@
 
 import React, { useEffect, useState } from 'react';
 import { ICONS } from '@/components/icons';
+import { Hourglass } from 'lucide-react';
 
-// --- Interfaces ---
+// --- Interfaces to match the adaptive backend ---
 interface HealthSubScore {
-  score: number;
-  details: string;
+    score: number;
+    details: string;
 }
-
 interface HealthScore {
-  overall: number;
-  technical: HealthSubScore;
-  content: HealthSubScore;
-  authority: HealthSubScore;
+    overall: number;
+    technical: HealthSubScore;
+    content: HealthSubScore;
+    authority: HealthSubScore;
 }
-
+interface SmartMetric {
+    isAnomaly: boolean | null;
+    message: string | null;
+    trend: 'up' | 'down' | 'stable' | null;
+    // ... other fields
+}
 interface DashboardStats {
-  healthScore: HealthScore;
+  status: 'success' | 'pending_data';
+  metrics?: { [key: string]: SmartMetric };
+  healthScore?: HealthScore | null;
+  message?: string;
+  daysFound?: number;
   lastUpdated: string;
 }
 
@@ -30,36 +39,33 @@ const getScoreColor = (score: number): string => {
 };
 
 // --- Sub-components ---
-const CircularProgressBar = ({ score }: { score: number }) => {
+const CircularProgressBar = ({ score, loading }: { score: number | null, loading: boolean }) => {
     const size = 160;
     const strokeWidth = 12;
     const center = size / 2;
     const radius = center - strokeWidth / 2;
     const circumference = 2 * Math.PI * radius;
+
+    if (loading || score === null) {
+        return (
+            <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+                <svg className="absolute" width={size} height={size}><circle className="stroke-gray-700" cx={center} cy={center} r={radius} strokeWidth={strokeWidth} fill="none" /></svg>
+                <Hourglass className="w-10 h-10 text-blue-500 animate-spin" />
+            </div>
+        );
+    }
+
     const offset = circumference - (score / 100) * circumference;
     const colorClass = getScoreColor(score).replace('text-', 'stroke-');
 
     return (
         <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
             <svg className="absolute" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                <circle
-                    className="stroke-gray-700"
-                    cx={center}
-                    cy={center}
-                    r={radius}
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                />
+                <circle className="stroke-gray-700" cx={center} cy={center} r={radius} strokeWidth={strokeWidth} fill="none" />
                 <circle
                     className={`${colorClass} transition-all duration-1000 ease-in-out`}
-                    cx={center}
-                    cy={center}
-                    r={radius}
-                    strokeWidth={strokeWidth}
-                    fill="none"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
+                    cx={center} cy={center} r={radius} strokeWidth={strokeWidth} fill="none"
+                    strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
                     transform={`rotate(-90 ${center} ${center})`}
                 />
             </svg>
@@ -84,35 +90,11 @@ const SubScoreItem = ({ icon, title, score, details }: { icon: React.ReactNode; 
 const HealthScoreSkeleton = () => (
     <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 animate-pulse">
         <div className="flex flex-col md:flex-row items-center md:items-start md:space-x-8">
-            <div className="flex-shrink-0 flex flex-col items-center">
-                <div className="w-40 h-40 bg-gray-700 rounded-full"></div>
-                <div className="h-4 bg-gray-700 rounded w-24 mt-2"></div>
-            </div>
+            <div className="flex-shrink-0 flex flex-col items-center"><div className="w-40 h-40 bg-gray-700 rounded-full"></div><div className="h-4 bg-gray-700 rounded w-24 mt-2"></div></div>
             <div className="w-full mt-6 md:mt-0 space-y-6">
-                <div className="flex space-x-4">
-                    <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
-                    <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-                        <div className="h-6 bg-gray-700 rounded w-1/2"></div>
-                        <div className="h-3 bg-gray-700 rounded w-full"></div>
-                    </div>
-                </div>
-                <div className="flex space-x-4">
-                    <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
-                    <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-                        <div className="h-6 bg-gray-700 rounded w-1/2"></div>
-                        <div className="h-3 bg-gray-700 rounded w-full"></div>
-                    </div>
-                </div>
-                <div className="flex space-x-4">
-                    <div className="w-12 h-12 bg-gray-700 rounded-full"></div>
-                    <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-700 rounded w-1/4"></div>
-                        <div className="h-6 bg-gray-700 rounded w-1/2"></div>
-                        <div className="h-3 bg-gray-700 rounded w-full"></div>
-                    </div>
-                </div>
+                <div className="flex space-x-4"><div className="w-12 h-12 bg-gray-700 rounded-full"></div><div className="flex-1 space-y-2"><div className="h-4 bg-gray-700 rounded w-1/4"></div><div className="h-6 bg-gray-700 rounded w-1/2"></div><div className="h-3 bg-gray-700 rounded w-full"></div></div></div>
+                <div className="flex space-x-4"><div className="w-12 h-12 bg-gray-700 rounded-full"></div><div className="flex-1 space-y-2"><div className="h-4 bg-gray-700 rounded w-1/4"></div><div className="h-6 bg-gray-700 rounded w-1/2"></div><div className="h-3 bg-gray-700 rounded w-full"></div></div></div>
+                <div className="flex space-x-4"><div className="w-12 h-12 bg-gray-700 rounded-full"></div><div className="flex-1 space-y-2"><div className="h-4 bg-gray-700 rounded w-1/4"></div><div className="h-6 bg-gray-700 rounded w-1/2"></div><div className="h-3 bg-gray-700 rounded w-full"></div></div></div>
             </div>
         </div>
     </div>
@@ -132,7 +114,7 @@ const TrafficHealthScore: React.FC = () => {
                     const errorData = await response.json();
                     throw new Error(errorData.error || 'Failed to fetch dashboard stats');
                 }
-                const result = await response.json();
+                const result: DashboardStats = await response.json();
                 setStats(result);
             } catch (e) {
                 setError(e instanceof Error ? e.message : 'An unknown error occurred');
@@ -144,15 +126,9 @@ const TrafficHealthScore: React.FC = () => {
     }, []);
 
     const renderContent = () => {
-        if (loading) {
-            return <HealthScoreSkeleton />;
-        }
-        if (error) {
-            return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
-        }
-        if (!stats?.healthScore) {
-            return <div className="text-center py-8 text-gray-400">Health score data not yet available.</div>;
-        }
+        if (loading) return <HealthScoreSkeleton />;
+        if (error) return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
+        if (!stats) return <div className="text-center py-8 text-gray-400">Could not load dashboard stats.</div>;
 
         const { healthScore } = stats;
 
@@ -160,13 +136,24 @@ const TrafficHealthScore: React.FC = () => {
              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
                 <div className="flex flex-col md:flex-row items-center md:items-start md:space-x-8">
                     <div className="flex-shrink-0 flex flex-col items-center mb-6 md:mb-0">
-                        <CircularProgressBar score={healthScore.overall} />
-                        <p className="mt-2 text-sm text-gray-400">Overall Health</p>
+                        <CircularProgressBar score={healthScore?.overall ?? null} loading={loading} />
+                        <p className="mt-2 text-sm text-gray-400">
+                            {healthScore ? 'Overall Health' : 'Calculating...'}
+                        </p>
                     </div>
                     <div className="w-full space-y-6">
-                        <SubScoreItem icon={ICONS.HEALTH_TECHNICAL} title="Technical Health" score={healthScore.technical.score} details={healthScore.technical.details} />
-                        <SubScoreItem icon={ICONS.HEALTH_CONTENT} title="Content Health" score={healthScore.content.score} details={healthScore.content.details} />
-                        <SubScoreItem icon={ICONS.HEALTH_AUTHORITY} title="Authority" score={healthScore.authority.score} details={healthScore.authority.details} />
+                        {healthScore ? (
+                            <>
+                                <SubScoreItem icon={ICONS.HEALTH_TECHNICAL} title="Technical Health" score={healthScore.technical.score} details={healthScore.technical.details} />
+                                <SubScoreItem icon={ICONS.HEALTH_CONTENT} title="Content Health" score={healthScore.content.score} details={healthScore.content.details} />
+                                <SubScoreItem icon={ICONS.HEALTH_AUTHORITY} title="Authority" score={healthScore.authority.score} details={healthScore.authority.details} />
+                            </>
+                        ) : (
+                            <div className="text-center py-10 text-gray-400">
+                                <p>More daily data is needed to calculate the full health score.</p>
+                                <p className="text-sm text-gray-500 mt-1">Check back tomorrow for an update.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
