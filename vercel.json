@@ -1,11 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/ingest?secret=1KA8_AvD8PL5",
+      "path": "/api/cron/ingest?secret=1Kk8_ArD8PL5",
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/cron/daily-stats?secret=1KA8_AvD8PL5",
+      "path": "/api/cron/daily-stats?secret=1Kk8_ArD8PL5",
       "schedule": "0 3 * * *"
     }
   ]
