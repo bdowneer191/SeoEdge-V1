@@ -5,66 +5,46 @@ import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService'
 
 export const dynamic = 'force-dynamic';
 
-// --- New Data Structures ---
+// --- Data Structures ---
 interface SmartMetric {
-  isAnomaly: boolean;
-  message: string;
-  trend: 'up' | 'down' | 'stable';
-  trendConfidence: number; // R-squared value
-  thirtyDayForecast: number;
+  isAnomaly: boolean | null;
+  message: string | null;
+  trend: 'up' | 'down' | 'stable' | null;
+  trendConfidence: number | null;
+  thirtyDayForecast: number | null;
   benchmarks: {
     industry: number;
     historicalAvg: number;
   };
   recommendations: string[];
 }
-
-interface HealthScoreComponent {
-    score: number;
-    details: string;
+interface HealthScoreComponent { score: number; details: string; }
+interface HealthScore {
+  overall: number;
+  technical: HealthScoreComponent;
+  content: HealthScoreComponent;
+  authority: HealthScoreComponent;
 }
 
 // --- Enhanced Statistical & Logic Helper Functions ---
-
-/**
- * Performs simple linear regression and calculates R-squared for trend confidence.
- * @param data An array of numbers.
- * @returns An object with slope (m), y-intercept (b), and R-squared value.
- */
 function trendAnalysis(data: number[]): { m: number; b: number; rSquared: number } {
   const n = data.length;
   if (n < 2) return { m: 0, b: n === 1 ? data[0] : 0, rSquared: 1 };
-
   let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += data[i];
-    sumXY += i * data[i];
-    sumXX += i * i;
-  }
-
+  for (let i = 0; i < n; i++) { sumX += i; sumY += data[i]; sumXY += i * data[i]; sumXX += i * i; }
   const m = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX) || 0;
   const b = (sumY - m * sumX) / n;
-
-  // Calculate R-squared for trend confidence
   const yMean = sumY / n;
-  let ssTot = 0;
-  let ssRes = 0;
+  let ssTot = 0; let ssRes = 0;
   for (let i = 0; i < n; i++) {
-    const y = data[i];
     const yPred = m * i + b;
-    ssTot += Math.pow(y - yMean, 2);
-    ssRes += Math.pow(y - yPred, 2);
+    ssTot += Math.pow(data[i] - yMean, 2);
+    ssRes += Math.pow(data[i] - yPred, 2);
   }
-
   const rSquared = ssTot === 0 ? 1 : 1 - (ssRes / ssTot);
-
   return { m, b, rSquared };
 }
 
-/**
- * Calculates the mean and standard deviation.
- */
 function getStats(data: number[]): { mean: number; stdDev: number } {
   const n = data.length;
   if (n === 0) return { mean: 0, stdDev: 0 };
@@ -73,27 +53,21 @@ function getStats(data: number[]): { mean: number; stdDev: number } {
   return { mean, stdDev: Math.sqrt(variance) };
 }
 
-/**
- * Detects if the latest value is an anomaly (2 standard deviations from 28-day mean).
- */
 function detectAnomaly(latestValue: number, historicalData: number[]): { isAnomaly: boolean; message: string } {
   const { mean, stdDev } = getStats(historicalData);
   const isAnomaly = stdDev > 0 && Math.abs(latestValue - mean) > 2 * stdDev;
   const message = isAnomaly
-    ? `Value of ${latestValue.toFixed(2)} is a significant deviation from the 28-day average of ${mean.toFixed(2)}.`
-    : `Value of ${latestValue.toFixed(2)} is stable within the 28-day average of ${mean.toFixed(2)}.`;
+    ? `Value of ${latestValue.toFixed(2)} is a significant deviation from the recent average of ${mean.toFixed(2)}.`
+    : `Value of ${latestValue.toFixed(2)} is stable within the recent average of ${mean.toFixed(2)}.`;
   return { isAnomaly, message };
 }
 
-/**
- * Generates rule-based recommendations.
- */
 function generateRecommendations(metricName: string, metric: SmartMetric): string[] {
     const recommendations: string[] = [];
     if (metric.isAnomaly && metric.trend === 'down') {
         recommendations.push(`Investigate the sharp downward trend in ${metricName}.`);
     }
-    if (metric.trend === 'down' && metric.trendConfidence > 0.75) {
+    if (metric.trend === 'down' && metric.trendConfidence && metric.trendConfidence > 0.75) {
         recommendations.push(`The downward trend for ${metricName} is strong. Prioritize analysis.`);
     }
     if (metricName === 'averageCtr' && metric.benchmarks.historicalAvg < 0.02) {
@@ -107,8 +81,6 @@ function generateRecommendations(metricName: string, metric: SmartMetric): strin
     }
     return recommendations;
 }
-
-// --- Health Score Calculation Functions ---
 
 function calculateTechnicalScore(avgPosition: number): HealthScoreComponent {
     let score = 0;
@@ -135,7 +107,6 @@ function calculateAuthorityScore(): HealthScoreComponent {
 }
 
 // --- Main Cron Job Handler ---
-
 export async function GET(request: NextRequest) {
   // 1. Authenticate
   const userAgent = request.headers.get('user-agent');
@@ -151,79 +122,90 @@ export async function GET(request: NextRequest) {
     const firestore = initializeFirebaseAdmin();
     const siteUrl = 'sc-domain:hypefresh.com';
 
-    // 2. Fetch last 60 days of historical data
+    // 2. Fetch historical data
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 60);
     const formatDate = (d: Date) => d.toISOString().split('T')[0];
+    const snapshot = await firestore.collection('analytics_agg').where('siteUrl', '==', siteUrl).where('date', '>=', formatDate(startDate)).where('date', '<=', formatDate(endDate)).orderBy('date', 'asc').get();
 
-    const snapshot = await firestore.collection('analytics_agg')
-      .where('siteUrl', '==', siteUrl)
-      .where('date', '>=', formatDate(startDate))
-      .where('date', '<=', formatDate(endDate))
-      .orderBy('date', 'asc')
-      .get();
-
-    if (snapshot.docs.length < 7) { // Looser requirement for dev/new environments
-      throw new Error(`Not enough historical data (found ${snapshot.docs.length}, need at least 7).`);
+    if (snapshot.empty) {
+      throw new Error('No historical data found at all.');
     }
-
     const historicalData: AnalyticsAggData[] = snapshot.docs.map(doc => doc.data() as AnalyticsAggData);
+    const dataLength = historicalData.length;
 
-    // 3. Calculate Smart Metrics for each key metric
+    // 3. Adaptively Calculate Smart Metrics
     const metricKeys: (keyof Omit<AnalyticsAggData, 'date' | 'siteUrl' | 'aggregatesByCountry' | 'aggregatesByDevice'>)[] = ['totalClicks', 'totalImpressions', 'averageCtr', 'averagePosition'];
     const metrics: { [key: string]: SmartMetric } = {};
 
     for (const key of metricKeys) {
       const dataSeries = historicalData.map(d => d[key] as number);
-      const lastPeriod = dataSeries.slice(-Math.min(28, dataSeries.length));
       const latestValue = dataSeries[dataSeries.length - 1];
-
-      const { m, b, rSquared } = trendAnalysis(dataSeries);
       const { mean: historicalAvg } = getStats(dataSeries);
-      const anomalyInfo = detectAnomaly(latestValue, lastPeriod);
 
-      const smartMetric: SmartMetric = {
-        isAnomaly: anomalyInfo.isAnomaly,
-        message: anomalyInfo.message,
-        trend: m > 0.01 ? 'up' : m < -0.01 ? 'down' : 'stable',
-        trendConfidence: rSquared,
-        thirtyDayForecast: Math.max(0, m * (dataSeries.length + 29) + b),
+      // Initialize with default/base values
+      let smartMetric: SmartMetric = {
+        isAnomaly: null,
+        message: 'Not enough data for anomaly detection.',
+        trend: null,
+        trendConfidence: null,
+        thirtyDayForecast: null,
         benchmarks: { industry: 0, historicalAvg },
-        recommendations: [],
+        recommendations: ['Collect more daily data for full analysis.'],
       };
+
+      // Calculate Trend & Forecast if enough data exists (e.g., >= 7 days)
+      if (dataLength >= 7) {
+        const { m, b, rSquared } = trendAnalysis(dataSeries);
+        smartMetric.trend = m > 0.01 ? 'up' : m < -0.01 ? 'down' : 'stable';
+        smartMetric.trendConfidence = rSquared;
+        smartMetric.thirtyDayForecast = Math.max(0, m * (dataLength + 29) + b);
+      }
+
+      // Calculate Anomaly if enough data exists (e.g., >= 14 days)
+      if (dataLength >= 14) {
+        const anomalyInfo = detectAnomaly(latestValue, dataSeries.slice(-Math.min(28, dataLength)));
+        smartMetric.isAnomaly = anomalyInfo.isAnomaly;
+        smartMetric.message = anomalyInfo.message;
+      }
+
+      // Generate recommendations based on available data
       smartMetric.recommendations = generateRecommendations(key, smartMetric);
       metrics[key] = smartMetric;
     }
 
-    // 4. Calculate Health Score
-    const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
-    const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
-    const authorityScore = calculateAuthorityScore();
-    const overallScore = (technicalScore.score * 0.4) + (contentScore.score * 0.4) + (authorityScore.score * 0.2);
+    // 4. Adaptively Calculate Health Score
+    let healthScore: HealthScore | null = null;
+    if (dataLength >= 14) { // Only calculate score if we have enough data for all components
+        const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
+        const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
+        const authorityScore = calculateAuthorityScore();
+        const overallScore = (technicalScore.score * 0.4) + (contentScore.score * 0.4) + (authorityScore.score * 0.2);
+        healthScore = {
+            overall: Math.round(overallScore),
+            technical: technicalScore,
+            content: contentScore,
+            authority: authorityScore,
+        };
+    }
 
-    const healthScore = {
-        overall: Math.round(overallScore),
-        technical: technicalScore,
-        content: contentScore,
-        authority: authorityScore,
-    };
-
-    // 5. Save results to a single document
+    // 5. Save results
     const resultDocument = {
+      status: 'success',
       lastUpdated: new Date().toISOString(),
       siteUrl,
       metrics,
-      healthScore, // Add the new health score object
+      healthScore, // This will be null if not enough data
     };
 
     await firestore.collection('dashboard_stats').doc('latest').set(resultDocument);
 
-    return NextResponse.json({ status: 'success', message: 'Smart KPI card data and health score generated successfully.' });
+    return NextResponse.json({ status: 'success', message: 'Adaptive stats calculation completed.' });
 
   } catch (error) {
-    console.error('[Cron Job] Smart KPI data generation failed:', error);
+    console.error('[Cron Job] Adaptive stats generation failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    return NextResponse.json({ status: 'error', message: 'Smart KPI data generation failed.', details: errorMessage }, { status: 500 });
+    return NextResponse.json({ status: 'error', message: 'Adaptive stats generation failed.', details: errorMessage }, { status: 500 });
   }
 }
