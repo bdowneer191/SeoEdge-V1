@@ -1,76 +1,57 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ICONS } from '@/components/icons';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 // --- Interfaces ---
-interface TrendData {
-  value: number;
-}
-
-interface AnomalyData {
-  isAnomaly: boolean;
-  message: string;
+interface SiteMetric {
+  date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
 }
 
 interface DashboardStats {
   lastUpdated: string;
-  siteUrl: string;
   forecast: {
-    totalClicks: TrendData[];
-    totalImpressions: TrendData[];
-    averageCtr: TrendData[];
-    averagePosition: TrendData[];
+    totalClicks: { value: number }[];
+    totalImpressions: { value: number }[];
+    averageCtr: { value: number }[];
+    averagePosition: { value: number }[];
   };
   anomalies: {
-    totalClicks: AnomalyData;
-    totalImpressions: AnomalyData;
-    averageCtr: AnomalyData;
-    averagePosition: AnomalyData;
+    totalClicks: { isAnomaly: boolean };
+    totalImpressions: { isAnomaly: boolean };
+    averageCtr: { isAnomaly: boolean };
+    averagePosition: { isAnomaly: boolean };
   };
 }
 
 // --- Sub-components ---
-const StatCard = ({ title, value, icon, trendData, anomalyData }: {
+const StatCard = ({ title, value, icon, forecastValue, isAnomaly, benchmarkValue }: {
   title: string;
   value: string | number;
   icon: React.ReactNode;
-  trendData?: TrendData[];
-  anomalyData?: AnomalyData;
+  forecastValue: string | number;
+  isAnomaly: boolean;
+  benchmarkValue: string;
 }) => (
-  <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between">
-    <div>
-      <div className="flex items-center space-x-4">
-        <div className="bg-gray-700 p-3 rounded-full">{icon}</div>
-        <div>
-          <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
-          <p className="mt-1 text-3xl font-bold text-white">{value}</p>
-        </div>
+  <div className={`bg-gray-800 border border-gray-700 rounded-xl p-4 ${isAnomaly ? 'border-red-500' : ''}`}>
+    <div className="flex items-center space-x-4">
+      <div className="bg-gray-700 p-3 rounded-full">{icon}</div>
+      <div>
+        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
+        <p className="mt-1 text-3xl font-bold text-white">{value}</p>
       </div>
-      {anomalyData && (
-        <div className={`mt-3 flex items-center text-xs ${anomalyData.isAnomaly ? 'text-yellow-400' : 'text-green-400'}`}>
-          {anomalyData.isAnomaly ? <AlertCircle className="w-4 h-4 mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-          <span>{anomalyData.message}</span>
-        </div>
-      )}
+      {isAnomaly && <AlertCircle className="w-5 h-5 text-red-500 ml-auto" />}
     </div>
-    {trendData && (
-      <div className="mt-4 h-16">
-        <p className="text-xs text-gray-500 mb-1">30-Day Forecast</p>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trendData}>
-            <Tooltip
-              contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.9)', border: '1px solid #4b5563' }}
-              labelStyle={{ color: '#9ca3af' }}
-              itemStyle={{ color: '#8884d8' }}
-            />
-            <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    )}
+    <div className="mt-4 text-xs text-gray-400">
+      <p>30-Day Forecast: <span className="font-semibold text-gray-200">{forecastValue}</span></p>
+      <p>{benchmarkValue}</p>
+    </div>
   </div>
 );
 
@@ -83,27 +64,44 @@ const StatCardSkeleton = () => (
         <div className="h-8 bg-gray-700 rounded w-1/2"></div>
       </div>
     </div>
-    <div className="mt-3 h-4 bg-gray-700 rounded w-full"></div>
-    <div className="mt-4 h-16 bg-gray-700 rounded"></div>
+    <div className="mt-4 h-4 bg-gray-700 rounded w-full"></div>
+    <div className="mt-2 h-4 bg-gray-700 rounded w-3/4"></div>
   </div>
 );
 
 // --- Main Component ---
 const SiteSummary: React.FC = () => {
-  const [data, setData] = useState<DashboardStats | null>(null);
+  const [historicalData, setHistoricalData] = useState<SiteMetric[] | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`/api/dashboard-stats`);
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `API Error: ${response.statusText}`);
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - 28);
+
+        // Fetch both historical data and dashboard stats in parallel
+        const [historicalRes, statsRes] = await Promise.all([
+          fetch(`/api/metrics/site?startDate=${formatDate(startDate)}&endDate=${formatDate(endDate)}`),
+          fetch(`/api/dashboard-stats`)
+        ]);
+
+        if (!historicalRes.ok) throw new Error(`API Error (metrics): ${historicalRes.statusText}`);
+        if (!statsRes.ok) {
+            const errorData = await statsRes.json();
+            throw new Error(errorData.error || `API Error (stats): ${statsRes.statusText}`);
         }
-        const result: DashboardStats = await response.json();
-        setData(result);
+
+        const historicalResult: SiteMetric[] = await historicalRes.json();
+        const statsResult: DashboardStats = await statsRes.json();
+
+        setHistoricalData(historicalResult);
+        setDashboardStats(statsResult);
+
       } catch (e) {
         setError(e instanceof Error ? e.message : 'An unknown error occurred');
       } finally {
@@ -115,12 +113,15 @@ const SiteSummary: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCardSkeleton />
-        <StatCardSkeleton />
-        <StatCardSkeleton />
-        <StatCardSkeleton />
-      </div>
+      <>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96 animate-pulse"></div>
+      </>
     );
   }
 
@@ -128,41 +129,58 @@ const SiteSummary: React.FC = () => {
     return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
   }
 
-  if (!data) {
-    return <div className="text-center py-8 text-gray-400">No dashboard data available.</div>;
-  }
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard
-        title="Clicks Forecast"
-        value={data.forecast.totalClicks[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
-        icon={ICONS.CLICKS}
-        trendData={data.forecast.totalClicks}
-        anomalyData={data.anomalies.totalClicks}
-      />
-      <StatCard
-        title="Impressions Forecast"
-        value={data.forecast.totalImpressions[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
-        icon={ICONS.IMPRESSIONS}
-        trendData={data.forecast.totalImpressions}
-        anomalyData={data.anomalies.totalImpressions}
-      />
-      <StatCard
-        title="CTR Forecast"
-        value={data.forecast.averageCtr[0] ? `${(data.forecast.averageCtr[0].value * 100).toFixed(2)}%` : 'N/A'}
-        icon={ICONS.CTR}
-        trendData={data.forecast.averageCtr}
-        anomalyData={data.anomalies.averageCtr}
-      />
-      <StatCard
-        title="Position Forecast"
-        value={data.forecast.averagePosition[0]?.value.toFixed(1) ?? 'N/A'}
-        icon={ICONS.POSITION}
-        trendData={data.forecast.averagePosition}
-        anomalyData={data.anomalies.averagePosition}
-      />
-    </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Total Clicks"
+          value={historicalData?.reduce((sum, item) => sum + item.clicks, 0).toLocaleString() ?? 'N/A'}
+          icon={ICONS.CLICKS}
+          isAnomaly={dashboardStats?.anomalies.totalClicks.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast.totalClicks[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
+          benchmarkValue="vs. Industry Avg."
+        />
+        <StatCard
+          title="Total Impressions"
+          value={historicalData?.reduce((sum, item) => sum + item.impressions, 0).toLocaleString() ?? 'N/A'}
+          icon={ICONS.IMPRESSIONS}
+          isAnomaly={dashboardStats?.anomalies.totalImpressions.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast.totalImpressions[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
+          benchmarkValue="vs. Industry Avg."
+        />
+        <StatCard
+          title="Average CTR"
+          value={historicalData ? `${(historicalData.reduce((sum, item) => sum + item.ctr, 0) / historicalData.length * 100).toFixed(2)}%` : 'N/A'}
+          icon={ICONS.CTR}
+          isAnomaly={dashboardStats?.anomalies.averageCtr.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast.averageCtr[0] ? `${(dashboardStats.forecast.averageCtr[0].value * 100).toFixed(2)}%` : 'N/A'}
+          benchmarkValue="vs. Industry Avg."
+        />
+        <StatCard
+          title="Average Position"
+          value={historicalData ? `${(historicalData.reduce((sum, item) => sum + item.position, 0) / historicalData.length).toFixed(1)}` : 'N/A'}
+          icon={ICONS.POSITION}
+          isAnomaly={dashboardStats?.anomalies.averagePosition.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast.averagePosition[0]?.value.toFixed(1) ?? 'N/A'}
+          benchmarkValue="vs. Industry Avg."
+        />
+      </div>
+
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={historicalData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+            <XAxis dataKey="date" tick={{ fill: '#9ca3af' }} tickFormatter={(dateStr) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+            <YAxis yAxisId="left" tick={{ fill: '#6a5acd' }} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: '#8a7aff' }} />
+            <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.9)', border: '1px solid #4b5563', color: '#e5e7eb' }} />
+            <Legend wrapperStyle={{ color: '#e5e7eb' }}/>
+            <Line yAxisId="left" type="monotone" dataKey="clicks" stroke="#6a5acd" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Clicks" />
+            <Line yAxisId="right" type="monotone" dataKey="impressions" stroke="#8a7aff" strokeWidth={2} dot={false} name="Impressions" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
   );
 };
 
