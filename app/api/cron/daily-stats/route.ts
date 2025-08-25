@@ -164,8 +164,8 @@ export async function GET(request: NextRequest) {
       .orderBy('date', 'asc')
       .get();
 
-    if (snapshot.docs.length < 28) { // Need at least 28 days for meaningful stats
-      throw new Error(`Not enough historical data (found ${snapshot.docs.length}, need at least 28).`);
+    if (snapshot.docs.length < 7) { // Looser requirement for dev/new environments
+      throw new Error(`Not enough historical data (found ${snapshot.docs.length}, need at least 7).`);
     }
 
     const historicalData: AnalyticsAggData[] = snapshot.docs.map(doc => doc.data() as AnalyticsAggData);
@@ -176,12 +176,12 @@ export async function GET(request: NextRequest) {
 
     for (const key of metricKeys) {
       const dataSeries = historicalData.map(d => d[key] as number);
-      const last28Days = dataSeries.slice(-28);
+      const lastPeriod = dataSeries.slice(-Math.min(28, dataSeries.length));
       const latestValue = dataSeries[dataSeries.length - 1];
 
       const { m, b, rSquared } = trendAnalysis(dataSeries);
       const { mean: historicalAvg } = getStats(dataSeries);
-      const anomalyInfo = detectAnomaly(latestValue, last28Days);
+      const anomalyInfo = detectAnomaly(latestValue, lastPeriod);
 
       const smartMetric: SmartMetric = {
         isAnomaly: anomalyInfo.isAnomaly,
