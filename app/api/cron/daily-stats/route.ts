@@ -19,6 +19,11 @@ interface SmartMetric {
   recommendations: string[];
 }
 
+interface HealthScoreComponent {
+    score: number;
+    details: string;
+}
+
 // --- Enhanced Statistical & Logic Helper Functions ---
 
 /**
@@ -86,16 +91,16 @@ function detectAnomaly(latestValue: number, historicalData: number[]): { isAnoma
 function generateRecommendations(metricName: string, metric: SmartMetric): string[] {
     const recommendations: string[] = [];
     if (metric.isAnomaly && metric.trend === 'down') {
-        recommendations.push(`Investigate the sharp downward trend in ${metricName}. Check recent site changes or external events.`);
+        recommendations.push(`Investigate the sharp downward trend in ${metricName}.`);
     }
     if (metric.trend === 'down' && metric.trendConfidence > 0.75) {
-        recommendations.push(`The downward trend for ${metricName} is strong. Prioritize analysis to reverse this.`);
+        recommendations.push(`The downward trend for ${metricName} is strong. Prioritize analysis.`);
     }
     if (metricName === 'averageCtr' && metric.benchmarks.historicalAvg < 0.02) {
-        recommendations.push('Overall CTR is low. Review and optimize page titles and meta descriptions for better click-through rates.');
+        recommendations.push('Overall CTR is low. Review and optimize page titles and meta descriptions.');
     }
     if (metricName === 'averagePosition' && metric.trend === 'down') {
-        recommendations.push('Average search position is declining. Review keyword strategy and check for new competitors.');
+        recommendations.push('Average position is declining. Review keyword strategy.');
     }
     if (recommendations.length === 0) {
         recommendations.push(`The ${metricName} metric appears stable. Continue monitoring.`);
@@ -103,6 +108,31 @@ function generateRecommendations(metricName: string, metric: SmartMetric): strin
     return recommendations;
 }
 
+// --- Health Score Calculation Functions ---
+
+function calculateTechnicalScore(avgPosition: number): HealthScoreComponent {
+    let score = 0;
+    if (avgPosition <= 5) score = 95;
+    else if (avgPosition <= 10) score = 80;
+    else if (avgPosition <= 20) score = 60;
+    else if (avgPosition <= 50) score = 40;
+    else score = 20;
+    return { score, details: `Score is based on an average ranking position of ${avgPosition.toFixed(1)}.` };
+}
+
+function calculateContentScore(avgCtr: number): HealthScoreComponent {
+    let score = 0;
+    if (avgCtr >= 0.07) score = 95;
+    else if (avgCtr >= 0.05) score = 85;
+    else if (avgCtr >= 0.03) score = 70;
+    else if (avgCtr >= 0.02) score = 50;
+    else score = 30;
+    return { score, details: `Score is based on an average CTR of ${(avgCtr * 100).toFixed(2)}%.` };
+}
+
+function calculateAuthorityScore(): HealthScoreComponent {
+    return { score: 75, details: "Authority metrics will be enabled in a future update." };
+}
 
 // --- Main Cron Job Handler ---
 
@@ -158,28 +188,38 @@ export async function GET(request: NextRequest) {
         message: anomalyInfo.message,
         trend: m > 0.01 ? 'up' : m < -0.01 ? 'down' : 'stable',
         trendConfidence: rSquared,
-        thirtyDayForecast: m * (dataSeries.length + 29) + b,
-        benchmarks: {
-          industry: 0, // Placeholder for industry benchmark
-          historicalAvg: historicalAvg,
-        },
-        recommendations: [], // Will be populated next
+        thirtyDayForecast: Math.max(0, m * (dataSeries.length + 29) + b),
+        benchmarks: { industry: 0, historicalAvg },
+        recommendations: [],
       };
-
       smartMetric.recommendations = generateRecommendations(key, smartMetric);
       metrics[key] = smartMetric;
     }
 
-    // 4. Save results to a single document
+    // 4. Calculate Health Score
+    const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
+    const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
+    const authorityScore = calculateAuthorityScore();
+    const overallScore = (technicalScore.score * 0.4) + (contentScore.score * 0.4) + (authorityScore.score * 0.2);
+
+    const healthScore = {
+        overall: Math.round(overallScore),
+        technical: technicalScore,
+        content: contentScore,
+        authority: authorityScore,
+    };
+
+    // 5. Save results to a single document
     const resultDocument = {
       lastUpdated: new Date().toISOString(),
       siteUrl,
       metrics,
+      healthScore, // Add the new health score object
     };
 
     await firestore.collection('dashboard_stats').doc('latest').set(resultDocument);
 
-    return NextResponse.json({ status: 'success', message: 'Smart KPI card data generated successfully.' });
+    return NextResponse.json({ status: 'success', message: 'Smart KPI card data and health score generated successfully.' });
 
   } catch (error) {
     console.error('[Cron Job] Smart KPI data generation failed:', error);
