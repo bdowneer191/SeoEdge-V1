@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/ingest?secret=1Kk8_ArD8PL5",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/aggregate?secret=1Kk8_ArD8PL5",
-      "schedule": "0 1 * * *"
+      "path": "/api/cron/ingest?secret=1KA8_AvD8PL5",
+      "schedule": "0 2 * * *"
     }
   ]
 }
