@@ -33,7 +33,6 @@ interface HealthScore {
   technical: HealthScoreComponent;
   content: HealthScoreComponent;
   authority: HealthScoreComponent;
-  ux: HealthScoreComponent;
 }
 
 // --- Enhanced Statistical & Logic Helper Functions ---
@@ -179,11 +178,18 @@ function generateRecommendations(metricName: string, metric: SmartMetric): strin
 
 function calculateTechnicalScore(avgPosition: number): HealthScoreComponent {
   let score = 0;
-  if (avgPosition <= 5) score = 95;
-  else if (avgPosition <= 10) score = 80;
-  else if (avgPosition <= 20) score = 60;
-  else if (avgPosition <= 50) score = 40;
-  else score = 20;
+
+  if (avgPosition <= 5) {
+    score = 95;
+  } else if (avgPosition <= 10) {
+    score = 80;
+  } else if (avgPosition <= 20) {
+    score = 60;
+  } else if (avgPosition <= 50) {
+    score = 40;
+  } else {
+    score = 20;
+  }
 
   return {
     score,
@@ -192,10 +198,8 @@ function calculateTechnicalScore(avgPosition: number): HealthScoreComponent {
 }
 
 function calculateContentScore(avgCtr: number): HealthScoreComponent {
-  const ctrPercent = avgCtr * 100;
   let score = 0;
-
-  if (avgCtr > 0.07) score = 95;
+  if (avgCtr >= 0.07) score = 95;
   else if (avgCtr >= 0.05) score = 85;
   else if (avgCtr >= 0.03) score = 70;
   else if (avgCtr >= 0.02) score = 50;
@@ -203,30 +207,15 @@ function calculateContentScore(avgCtr: number): HealthScoreComponent {
 
   return {
     score,
-    details: `Score is based on an average CTR of ${ctrPercent.toFixed(2)}%.`
+    details: `Based on average CTR of ${(avgCtr * 100).toFixed(2)}%. Higher CTR indicates more compelling content and titles.`
   };
 }
 
 function calculateAuthorityScore(): HealthScoreComponent {
+  // Placeholder for future authority metrics (backlinks, domain authority, etc.)
   return {
     score: 75,
-    details: 'Authority metrics will be enabled in a future update.'
-  };
-}
-
-function calculateUserExperienceScore(avgCtr: number): HealthScoreComponent {
-  const ctrPercent = avgCtr * 100;
-  let score = 0;
-
-  if (avgCtr > 0.07) score = 95;
-  else if (avgCtr >= 0.05) score = 85;
-  else if (avgCtr >= 0.03) score = 70;
-  else if (avgCtr >= 0.02) score = 50;
-  else score = 30;
-
-  return {
-    score,
-    details: `Score is based on an average CTR of ${ctrPercent.toFixed(2)}%.`
+    details: "Authority score based on domain strength indicators. Full authority metrics will be available in future updates."
   };
 }
 
@@ -350,13 +339,11 @@ export async function GET(request: NextRequest) {
       const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
       const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
       const authorityScore = calculateAuthorityScore();
-      const uxScore = calculateUserExperienceScore(metrics.averageCtr.benchmarks.historicalAvg);
 
       const overallScore = Math.round(
         (technicalScore.score * 0.4) +
         (contentScore.score * 0.4) +
-        (authorityScore.score * 0.1) +
-        (uxScore.score * 0.1)
+        (authorityScore.score * 0.2)
       );
 
       healthScore = {
@@ -364,7 +351,6 @@ export async function GET(request: NextRequest) {
         technical: technicalScore,
         content: contentScore,
         authority: authorityScore,
-        ux: uxScore
       };
     }
 
