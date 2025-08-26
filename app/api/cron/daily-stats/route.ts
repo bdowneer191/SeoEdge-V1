@@ -32,6 +32,7 @@ interface HealthScore {
   overall: number;
   technical: HealthScoreComponent;
   content: HealthScoreComponent;
+  userExperience: HealthScoreComponent;
   authority: HealthScoreComponent;
 }
 
@@ -211,10 +212,25 @@ function calculateContentScore(avgCtr: number): HealthScoreComponent {
   };
 }
 
+function calculateUserExperienceScore(avgCtr: number): HealthScoreComponent {
+  let score = 0;
+  if (avgCtr >= 0.07) score = 95;
+  else if (avgCtr >= 0.05) score = 85;
+  else if (avgCtr >= 0.03) score = 70;
+  else if (avgCtr >= 0.02) score = 50;
+  else score = 30;
+
+  return {
+    score,
+    details: `Score is based on an average CTR of ${(avgCtr * 100).toFixed(2)}%.`
+  };
+}
+
 function calculateAuthorityScore(): HealthScoreComponent {
+  // Placeholder for future authority metrics (backlinks, domain authority, etc.)
   return {
     score: 75,
-    details: "Authority metrics will be enabled in a future update."
+    details: "Authority score based on domain strength indicators. Full authority metrics will be available in future updates."
   };
 }
 
@@ -337,18 +353,21 @@ export async function GET(request: NextRequest) {
     if (dataLength >= 14) {
       const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
       const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
+      const userExperienceScore = calculateUserExperienceScore(metrics.averageCtr.benchmarks.historicalAvg);
       const authorityScore = calculateAuthorityScore();
 
       const overallScore = Math.round(
-        (technicalScore.score * 0.4) +
-        (contentScore.score * 0.4) +
-        (authorityScore.score * 0.2)
+        (technicalScore.score * 0.3) +
+        (contentScore.score * 0.3) +
+        (userExperienceScore.score * 0.25) +
+        (authorityScore.score * 0.15)
       );
 
       healthScore = {
         overall: overallScore,
         technical: technicalScore,
         content: contentScore,
+        userExperience: userExperienceScore,
         authority: authorityScore,
       };
     }
