@@ -136,32 +136,32 @@ const SiteSummary: React.FC = () => {
           title="Total Clicks"
           value={historicalData?.reduce((sum, item) => sum + item.clicks, 0).toLocaleString() ?? 'N/A'}
           icon={ICONS.CLICKS}
-          isAnomaly={dashboardStats?.anomalies.totalClicks.isAnomaly ?? false}
-          forecastValue={dashboardStats?.forecast.totalClicks[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
+          isAnomaly={dashboardStats?.anomalies?.totalClicks?.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast?.totalClicks?.[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
           benchmarkValue="vs. Industry Avg."
         />
         <StatCard
           title="Total Impressions"
           value={historicalData?.reduce((sum, item) => sum + item.impressions, 0).toLocaleString() ?? 'N/A'}
           icon={ICONS.IMPRESSIONS}
-          isAnomaly={dashboardStats?.anomalies.totalImpressions.isAnomaly ?? false}
-          forecastValue={dashboardStats?.forecast.totalImpressions[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
+          isAnomaly={dashboardStats?.anomalies?.totalImpressions?.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast?.totalImpressions?.[0]?.value.toLocaleString(undefined, {maximumFractionDigits: 0}) ?? 'N/A'}
           benchmarkValue="vs. Industry Avg."
         />
         <StatCard
           title="Average CTR"
           value={historicalData ? `${(historicalData.reduce((sum, item) => sum + item.ctr, 0) / historicalData.length * 100).toFixed(2)}%` : 'N/A'}
           icon={ICONS.CTR}
-          isAnomaly={dashboardStats?.anomalies.averageCtr.isAnomaly ?? false}
-          forecastValue={dashboardStats?.forecast.averageCtr[0] ? `${(dashboardStats.forecast.averageCtr[0].value * 100).toFixed(2)}%` : 'N/A'}
+          isAnomaly={dashboardStats?.anomalies?.averageCtr?.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast?.averageCtr?.[0] ? `${(dashboardStats.forecast.averageCtr[0].value * 100).toFixed(2)}%` : 'N/A'}
           benchmarkValue="vs. Industry Avg."
         />
         <StatCard
           title="Average Position"
           value={historicalData ? `${(historicalData.reduce((sum, item) => sum + item.position, 0) / historicalData.length).toFixed(1)}` : 'N/A'}
           icon={ICONS.POSITION}
-          isAnomaly={dashboardStats?.anomalies.averagePosition.isAnomaly ?? false}
-          forecastValue={dashboardStats?.forecast.averagePosition[0]?.value.toFixed(1) ?? 'N/A'}
+          isAnomaly={dashboardStats?.anomalies?.averagePosition?.isAnomaly ?? false}
+          forecastValue={dashboardStats?.forecast?.averagePosition?.[0]?.value.toFixed(1) ?? 'N/A'}
           benchmarkValue="vs. Industry Avg."
         />
       </div>
