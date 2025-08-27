@@ -30,7 +30,10 @@ export class EmbeddingService {
     ].join('\n\n');
 
     try {
-      const response: EmbedContentResponse = await this.genAI.getGenerativeModel({ model: this.embeddingModel }).embedContent(combinedContent);
+      const response = await this.genAI.models.embedContent({
+        model: this.embeddingModel,
+        content: combinedContent,
+      });
 
       const embedding = response.embedding;
 

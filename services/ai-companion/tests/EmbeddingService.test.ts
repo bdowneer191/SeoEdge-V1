@@ -4,11 +4,10 @@ import { GoogleGenAI } from '@google/genai';
 // Mock the @google/genai library
 jest.mock('@google/genai', () => {
   const mockEmbedContent = jest.fn();
-  const mockGetGenerativeModel = jest.fn(() => ({
-    embedContent: mockEmbedContent,
-  }));
   const mockGoogleGenAI = jest.fn(() => ({
-    getGenerativeModel: mockGetGenerativeModel,
+    models: {
+      embedContent: mockEmbedContent,
+    },
   }));
 
   return {
@@ -87,7 +86,10 @@ describe('EmbeddingService', () => {
         `Top Queries: ${pageData.topQueries.join(', ')}`,
       ].join('\n\n');
 
-      expect(__mockEmbedContent).toHaveBeenCalledWith(expectedContent);
+      expect(__mockEmbedContent).toHaveBeenCalledWith({
+        model: 'text-embedding-004',
+        content: expectedContent,
+      });
     });
 
     it('should throw an error for an invalid embedding response', async () => {
