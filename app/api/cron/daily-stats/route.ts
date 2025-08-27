@@ -442,7 +442,7 @@ export async function GET(request: NextRequest) {
       const firestore = initializeFirebaseAdmin();
       await firestore.collection('dashboard_stats').doc('latest').set({
         status: 'error',
-        lastUpdated: new new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
         error: errorMessage,
         message: 'Analytics generation failed. Please check data ingestion.'
       });
