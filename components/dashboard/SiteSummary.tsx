@@ -25,8 +25,6 @@ interface SmartMetric {
     historicalAvg: number;
   };
   recommendations: string[];
-  forecastUpperBound?: number | null;
-  forecastLowerBound?: number | null;
 }
 
 interface DashboardStats {
@@ -42,13 +40,13 @@ interface DashboardStats {
 
 interface ChartData {
   date: string;
-  clicks: number | null;
-  impressions: number | null;
+  clicks: number;
+  impressions: number;
   ctr: number;
   position: number;
-  forecastClicks?: number | null;
-  forecastUpper?: number | null;
-  forecastLower?: number | null;
+  forecastClicks?: number;
+  forecastClicksUpper?: number;
+  forecastClicksLower?: number;
   isForecast?: boolean;
 }
 
@@ -89,101 +87,6 @@ const formatMetricValue = (key: string, value: number) => {
 const formatForecastValue = (key: string, value: number | null) => {
   if (value === null) return 'N/A';
   return formatMetricValue(key, value);
-};
-
-// Generate forecast data points
-const generateForecastData = (
-  historicalData: SiteMetric[],
-  forecastValue: number | null,
-  upperBound: number | null,
-  lowerBound: number | null
-): ChartData[] => {
-  if (!forecastValue || !historicalData.length) return [];
-
-  const lastDate = new Date(historicalData[historicalData.length - 1].date);
-  const forecastPoints: ChartData[] = [];
-
-  // Create intermediate forecast points for smoother visualization
-  const forecastDays = [7, 14, 21, 30]; // Show forecast at these intervals
-
-  forecastDays.forEach((days, index) => {
-    const forecastDate = new Date(lastDate);
-    forecastDate.setDate(lastDate.getDate() + days);
-
-    // Linear interpolation for intermediate points
-    const progress = (index + 1) / forecastDays.length;
-    const lastClicks = historicalData[historicalData.length - 1].clicks;
-    const interpolatedForecast = lastClicks + (forecastValue - lastClicks) * progress;
-    const interpolatedUpper = upperBound ? lastClicks + (upperBound - lastClicks) * progress : null;
-    const interpolatedLower = lowerBound ? Math.max(0, lastClicks + (lowerBound - lastClicks) * progress) : null;
-
-    forecastPoints.push({
-      date: forecastDate.toISOString().split('T')[0],
-      clicks: null, // Don't show historical line for forecast points
-      impressions: null,
-      ctr: 0,
-      position: 0,
-      forecastClicks: interpolatedForecast,
-      forecastUpper: interpolatedUpper,
-      forecastLower: interpolatedLower,
-      isForecast: true
-    });
-  });
-
-  return forecastPoints;
-};
-
-// Custom tooltip for better data presentation
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload || !payload.length) return null;
-
-  return (
-    <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-lg">
-      <p className="text-gray-300 text-sm font-semibold mb-2">
-        {new Date(label).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        })}
-      </p>
-      {payload.map((entry: any, index: number) => {
-        if (entry.value === null || entry.value === 0) return null;
-
-        let displayName = entry.name;
-        let displayValue = entry.value;
-
-        switch (entry.dataKey) {
-          case 'clicks':
-            displayName = 'Clicks (Historical)';
-            displayValue = displayValue.toLocaleString();
-            break;
-          case 'impressions':
-            displayName = 'Impressions';
-            displayValue = displayValue.toLocaleString();
-            break;
-          case 'forecastClicks':
-            displayName = 'Forecast Clicks';
-            displayValue = displayValue.toLocaleString();
-            break;
-          case 'forecastUpper':
-            displayName = 'Forecast Upper Bound';
-            displayValue = displayValue.toLocaleString();
-            break;
-          case 'forecastLower':
-            displayName = 'Forecast Lower Bound';
-            displayValue = displayValue.toLocaleString();
-            break;
-        }
-
-        return (
-          <p key={index} className="text-sm">
-            <span style={{ color: entry.color }}>{displayName}: </span>
-            <span className="text-white font-medium">{displayValue}</span>
-          </p>
-        );
-      })}
-    </div>
-  );
 };
 
 // --- Enhanced StatCard Component ---
@@ -330,28 +233,35 @@ const SiteSummary: React.FC = () => {
         const historicalResult: SiteMetric[] = await historicalRes.json();
         const statsResult: DashboardStats = await statsRes.json();
 
-        // Convert historical data to chart format
-        const historicalChartData: ChartData[] = historicalResult.map(item => ({
-          date: item.date,
-          clicks: item.clicks,
-          impressions: item.impressions,
-          ctr: item.ctr,
-          position: item.position,
+        // Combine historical data with forecast data
+        const chartData: ChartData[] = historicalResult.map(item => ({
+          ...item,
           isForecast: false
         }));
 
-        // Generate forecast data if available
-        const forecastData = generateForecastData(
-          historicalResult,
-          statsResult.metrics?.totalClicks?.thirtyDayForecast || null,
-          statsResult.metrics?.totalClicks?.forecastUpperBound || null,
-          statsResult.metrics?.totalClicks?.forecastLowerBound || null
-        );
+        // Add forecast data if available
+        if (statsResult.metrics?.totalClicks?.thirtyDayForecast) {
+          const lastHistoricalDate = new Date(historicalResult[historicalResult.length - 1]?.date || endDate);
+          const forecastDate = new Date(lastHistoricalDate);
+          forecastDate.setDate(forecastDate.getDate() + 30);
 
-        // Combine historical and forecast data
-        const combinedData = [...historicalChartData, ...forecastData];
+          const forecastValue = statsResult.metrics.totalClicks.thirtyDayForecast;
+          const uncertaintyRange = forecastValue * 0.1; // ±10% uncertainty
 
-        setCombinedChartData(combinedData);
+          chartData.push({
+            date: formatDate(forecastDate),
+            clicks: 0, // Historical clicks set to 0 for forecast point
+            impressions: 0,
+            ctr: 0,
+            position: 0,
+            forecastClicks: forecastValue,
+            forecastClicksUpper: forecastValue + uncertaintyRange,
+            forecastClicksLower: Math.max(0, forecastValue - uncertaintyRange),
+            isForecast: true
+          });
+        }
+
+        setCombinedChartData(chartData);
         setDashboardStats(statsResult);
 
       } catch (e) {
@@ -386,12 +296,11 @@ const SiteSummary: React.FC = () => {
   }
 
   // Calculate current values from historical data
-  const historicalData = combinedChartData.filter(d => !d.isForecast && d.clicks !== null);
   const currentValues = {
-    totalClicks: historicalData.reduce((sum, item) => sum + (item.clicks || 0), 0),
-    totalImpressions: historicalData.reduce((sum, item) => sum + (item.impressions || 0), 0),
-    averageCtr: historicalData.reduce((sum, item) => sum + item.ctr, 0) / historicalData.length,
-    averagePosition: historicalData.reduce((sum, item) => sum + item.position, 0) / historicalData.length
+    totalClicks: combinedChartData.filter(d => !d.isForecast).reduce((sum, item) => sum + item.clicks, 0),
+    totalImpressions: combinedChartData.filter(d => !d.isForecast).reduce((sum, item) => sum + item.impressions, 0),
+    averageCtr: combinedChartData.filter(d => !d.isForecast).reduce((sum, item) => sum + item.ctr, 0) / combinedChartData.filter(d => !d.isForecast).length,
+    averagePosition: combinedChartData.filter(d => !d.isForecast).reduce((sum, item) => sum + item.position, 0) / combinedChartData.filter(d => !d.isForecast).length
   };
 
   return (
@@ -427,17 +336,13 @@ const SiteSummary: React.FC = () => {
         />
       </div>
 
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8">
+      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Traffic Overview with 30-Day Forecast</h3>
           <div className="flex items-center space-x-4 text-xs text-gray-400">
             <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
+              <div className="w-3 h-3 bg-indigo-500 rounded"></div>
               <span>Historical Clicks</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-3 h-3 bg-purple-500 rounded"></div>
-              <span>Impressions</span>
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-3 h-3 border-2 border-dashed border-green-500 rounded"></div>
@@ -449,81 +354,90 @@ const SiteSummary: React.FC = () => {
             </div>
           </div>
         </div>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={combinedChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: '#9ca3af' }}
+              tickFormatter={(dateStr) => {
+                const date = new Date(dateStr);
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              }}
+            />
+            <YAxis yAxisId="left" tick={{ fill: '#6a5acd' }} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fill: '#8a7aff' }} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: 'rgba(31, 41, 55, 0.9)',
+                border: '1px solid #4b5563',
+                color: '#e5e7eb'
+              }}
+              formatter={(value, name) => {
+                if (name === 'forecastClicks') return [`${Number(value).toLocaleString()} (forecast)`, 'Clicks'];
+                if (name === 'clicks') return [Number(value).toLocaleString(), 'Clicks'];
+                if (name === 'impressions') return [Number(value).toLocaleString(), 'Impressions'];
+                return [value, name];
+              }}
+            />
+            <Legend wrapperStyle={{ color: '#e5e7eb' }} />
 
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={combinedChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.1)" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: '#9ca3af', fontSize: 12 }}
-                tickFormatter={(dateStr) => {
-                  const date = new Date(dateStr);
-                  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                }}
-              />
-              <YAxis yAxisId="left" tick={{ fill: '#6366f1', fontSize: 12 }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fill: '#8b5cf6', fontSize: 12 }} />
+            {/* Uncertainty Range Area */}
+            <Area
+              yAxisId="left"
+              type="monotone"
+              dataKey="forecastClicksUpper"
+              fill="rgba(34, 197, 94, 0.2)"
+              stroke="none"
+              connectNulls={false}
+            />
+            <Area
+              yAxisId="left"
+              type="monotone"
+              dataKey="forecastClicksLower"
+              fill="rgba(31, 41, 55, 1)"
+              stroke="none"
+              connectNulls={false}
+            />
 
-              <Tooltip content={<CustomTooltip />} />
+            {/* Historical Data Lines */}
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="clicks"
+              stroke="#6366f1"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 6 }}
+              name="Historical Clicks"
+              connectNulls={false}
+            />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="impressions"
+              stroke="#8b5cf6"
+              strokeWidth={2}
+              dot={false}
+              name="Impressions"
+              connectNulls={false}
+            />
 
-              {/* Render uncertainty area first (background) */}
-              <Area
-                yAxisId="left"
-                type="monotone"
-                dataKey="forecastUpper"
-                fill="rgba(34, 197, 94, 0.15)"
-                stroke="none"
-                connectNulls={false}
-              />
-              <Area
-                yAxisId="left"
-                type="monotone"
-                dataKey="forecastLower"
-                fill="rgba(17, 24, 39, 1)"
-                stroke="none"
-                connectNulls={false}
-              />
-
-              {/* Historical lines */}
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="clicks"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', r: 3 }}
-                activeDot={{ r: 5 }}
-                name="Historical Clicks"
-                connectNulls={false}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="impressions"
-                stroke="#8b5cf6"
-                strokeWidth={2}
-                dot={{ fill: '#8b5cf6', r: 3 }}
-                name="Impressions"
-                connectNulls={false}
-              />
-
-              {/* Forecast line */}
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="forecastClicks"
-                stroke="#22c55e"
-                strokeWidth={2}
-                strokeDasharray="8 4"
-                dot={{ fill: '#22c55e', r: 4 }}
-                activeDot={{ r: 6 }}
-                name="Forecast"
-                connectNulls={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+            {/* Forecast Line */}
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="forecastClicks"
+              stroke="#22c55e"
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              dot={{ fill: '#22c55e', r: 4 }}
+              activeDot={{ r: 6 }}
+              name="Forecast Clicks"
+              connectNulls={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </>
   );

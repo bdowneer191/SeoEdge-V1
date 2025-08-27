@@ -234,38 +234,11 @@ function calculateAuthorityScore(): HealthScoreComponent {
   };
 }
 
-// Enhanced predictive overlays calculation with better uncertainty modeling
-function calculatePredictiveOverlays(
-  forecast: number,
-  historicalData: number[],
-  trendConfidence: number | null
-): { upperBound: number; lowerBound: number } {
-
-  // Base uncertainty starts at 15% and adjusts based on trend confidence and data variability
-  let baseUncertainty = 0.15;
-
-  // Adjust uncertainty based on trend confidence
-  if (trendConfidence) {
-    // Lower confidence = higher uncertainty
-    const confidenceAdjustment = (1 - trendConfidence) * 0.2;
-    baseUncertainty += confidenceAdjustment;
-  }
-
-  // Calculate historical volatility if we have enough data
-  if (historicalData.length > 7) {
-    const { stdDev, mean } = getStats(historicalData);
-    const coefficientOfVariation = mean > 0 ? stdDev / mean : 0;
-
-    // Add volatility-based uncertainty (cap at 30%)
-    const volatilityUncertainty = Math.min(0.3, coefficientOfVariation * 0.5);
-    baseUncertainty += volatilityUncertainty;
-  }
-
-  // Cap total uncertainty at 50%
-  const finalUncertainty = Math.min(0.5, baseUncertainty);
-
-  const upperBound = forecast * (1 + finalUncertainty);
-  const lowerBound = Math.max(0, forecast * (1 - finalUncertainty));
+function calculatePredictiveOverlays(forecast: number): { upperBound: number; lowerBound: number } {
+  // Simple uncertainty range using ±15% for MVP
+  const uncertaintyPercentage = 0.15;
+  const upperBound = forecast * (1 + uncertaintyPercentage);
+  const lowerBound = Math.max(0, forecast * (1 - uncertaintyPercentage));
 
   return { upperBound, lowerBound };
 }
@@ -356,8 +329,8 @@ export async function GET(request: NextRequest) {
         const forecast = Math.max(0, m * (dataLength + 29) + b);
         smartMetric.thirtyDayForecast = forecast;
 
-        // Calculate enhanced predictive overlay bounds
-        const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast, dataSeries, rSquared);
+        // Calculate predictive overlay bounds
+        const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast);
         smartMetric.forecastUpperBound = upperBound;
         smartMetric.forecastLowerBound = lowerBound;
       }

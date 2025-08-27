@@ -1,0 +1,48 @@
+import { GoogleGenAI, EmbedContentResponse } from '@google/genai';
+
+interface PageData {
+  pageTitle: string;
+  pageContent: string;
+  topQueries: string[];
+}
+
+export class EmbeddingService {
+  private readonly genAI: GoogleGenAI;
+  private readonly embeddingModel = 'text-embedding-004';
+
+  constructor() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is not set.');
+    }
+    this.genAI = new GoogleGenAI(apiKey);
+  }
+
+  public async generatePageEmbedding({
+    pageTitle,
+    pageContent,
+    topQueries,
+  }: PageData): Promise<number[]> {
+    const combinedContent = [
+      `Title: ${pageTitle}`,
+      `Content: ${pageContent}`,
+      `Top Queries: ${topQueries.join(', ')}`,
+    ].join('\n\n');
+
+    try {
+      const response: EmbedContentResponse = await this.genAI.getGenerativeModel({ model: this.embeddingModel }).embedContent(combinedContent);
+
+      const embedding = response.embedding;
+
+      if (!embedding || !Array.isArray(embedding.values)) {
+        throw new Error('Invalid embedding response from Gemini API');
+      }
+
+      return embedding.values;
+    } catch (error) {
+      console.error('Error generating embedding:', error);
+      // It's better to let the caller handle the error, so re-throw or throw a custom error
+      throw new Error('Failed to generate page embedding.');
+    }
+  }
+}
