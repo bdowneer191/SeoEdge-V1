@@ -62,7 +62,7 @@ describe('GET /api/pages/cluster', () => {
         .mockResolvedValueOnce(mockEmbeddings[2]),
     }));
     (ClusteringService as jest.Mock).mockImplementation(() => ({
-      clusterEmbeddings: jest.fn().mockReturnValue(mockClusterAssignments),
+      getPageClusters: jest.fn().mockReturnValue(mockClusterAssignments),
     }));
 
     // Reset mocks

@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Cluster the embeddings
-    const clusterAssignments = clusteringService.clusterEmbeddings(embeddings);
+    const k = Math.ceil(Math.sqrt(pages.length / 2));
+    const clusterAssignments = clusteringService.getPageClusters(embeddings, k);
 
     // 5. Batch-update Firestore with the cluster IDs
     const batch = firestore.batch();
