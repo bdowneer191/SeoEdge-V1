@@ -15,7 +15,7 @@ export class EmbeddingService {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY environment variable is not set.');
     }
-    this.genAI = new GoogleGenAI(apiKey);
+    this.genAI = new GoogleGenAI({ apiKey });
   }
 
   public async generatePageEmbedding({

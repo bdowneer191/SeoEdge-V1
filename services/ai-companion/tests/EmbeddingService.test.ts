@@ -46,7 +46,7 @@ describe('EmbeddingService', () => {
   it('should correctly initialize with an API key', () => {
     process.env.GEMINI_API_KEY = 'test-api-key';
     expect(() => new EmbeddingService()).not.toThrow();
-    expect(GoogleGenAI).toHaveBeenCalledWith('test-api-key');
+    expect(GoogleGenAI).toHaveBeenCalledWith({ apiKey: 'test-api-key' });
   });
 
   describe('generatePageEmbedding', () => {
