@@ -35,7 +35,10 @@ export class EmbeddingService {
         contents: [combinedContent],
       });
 
-      const embedding = response.embedding;
+      if (!response.embeddings || !Array.isArray(response.embeddings) || response.embeddings.length === 0) {
+        throw new Error('Invalid embedding response from Gemini API');
+      }
+      const embedding = response.embeddings[0];
 
       if (!embedding || !Array.isArray(embedding.values)) {
         throw new Error('Invalid embedding response from Gemini API');

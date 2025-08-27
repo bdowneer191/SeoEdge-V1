@@ -65,7 +65,7 @@ describe('EmbeddingService', () => {
     it('should generate and return a valid embedding for a page', async () => {
       const mockEmbedding = [0.1, 0.2, 0.3, 0.4];
       __mockEmbedContent.mockResolvedValue({
-        embedding: { values: mockEmbedding },
+        embeddings: [{ values: mockEmbedding }],
       });
 
       const embedding = await service.generatePageEmbedding(pageData);
@@ -75,7 +75,7 @@ describe('EmbeddingService', () => {
 
     it('should format the input data correctly for the API call', async () => {
       __mockEmbedContent.mockResolvedValue({
-        embedding: { values: [0.1] },
+        embeddings: [{ values: [0.1] }],
       });
 
       await service.generatePageEmbedding(pageData);
@@ -93,7 +93,7 @@ describe('EmbeddingService', () => {
     });
 
     it('should throw an error for an invalid embedding response', async () => {
-      __mockEmbedContent.mockResolvedValue({ embedding: null });
+      __mockEmbedContent.mockResolvedValue({ embeddings: null });
 
       await expect(service.generatePageEmbedding(pageData)).rejects.toThrow(
         'Failed to generate page embedding.'
@@ -102,7 +102,7 @@ describe('EmbeddingService', () => {
 
     it('should throw an error if the embedding values are not an array', async () => {
       __mockEmbedContent.mockResolvedValue({
-        embedding: { values: 'not-an-array' },
+        embeddings: [{ values: 'not-an-array' }],
       });
 
       await expect(service.generatePageEmbedding(pageData)).rejects.toThrow(
