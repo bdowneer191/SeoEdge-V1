@@ -88,7 +88,7 @@ describe('EmbeddingService', () => {
 
       expect(__mockEmbedContent).toHaveBeenCalledWith({
         model: 'text-embedding-004',
-        content: expectedContent,
+        contents: [expectedContent],
       });
     });
 
