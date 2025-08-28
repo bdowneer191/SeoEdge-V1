@@ -453,3 +453,4 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 // Export the function for use in cron jobs
 export { runAdvancedPageTiering };
 export type { PerformanceTier, TierAnalysis };
+export type { PerformanceTier, TierAnalysis };
