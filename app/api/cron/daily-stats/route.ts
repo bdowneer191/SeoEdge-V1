@@ -1,10 +1,10 @@
+// app/api/cron/daily-stats/route.ts - Updated version
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
+import { runAdvancedPageTiering } from './enhanced-tiering'; // Import our new system
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
-import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
-
 
 export const dynamic = 'force-dynamic';
 
@@ -39,12 +39,10 @@ interface HealthScore {
   authority: HealthScoreComponent;
 }
 
-// --- Enhanced Statistical & Logic Helper Functions ---
-
+// Your existing enhanced statistical & logic helper functions
 function getStats(data: number[]): { mean: number; stdDev: number } {
   const n = data.length;
   if (n === 0) return { mean: 0, stdDev: 0 };
-
   const mean = data.reduce((a, b) => a + b) / n;
   const variance = data.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
   return { mean, stdDev: Math.sqrt(variance) };
@@ -57,15 +55,12 @@ function detectAnomaly(latestValue: number, historicalData: number[]): { isAnoma
       message: `Current value: ${latestValue.toFixed(2)} (insufficient data for anomaly detection).`
     };
   }
-
   const { mean, stdDev } = getStats(historicalData);
-  const threshold = 2; // 2 standard deviations
+  const threshold = 2;
   const isAnomaly = stdDev > 0 && Math.abs(latestValue - mean) > threshold * stdDev;
-
   const message = isAnomaly
     ? `Value of ${latestValue.toFixed(2)} is a significant deviation from the recent average of ${mean.toFixed(2)}.`
     : `Value of ${latestValue.toFixed(2)} is stable within the recent average of ${mean.toFixed(2)}.`;
-
   return { isAnomaly, message };
 }
 
@@ -246,9 +241,8 @@ function calculatePredictiveOverlays(
   return { upperBound, lowerBound };
 }
 
-// --- Main Cron Job Handler ---
 export async function GET(request: NextRequest) {
-  // 1. Authenticate
+  // Your existing authentication
   const userAgent = request.headers.get('user-agent');
   if (userAgent !== 'vercel-cron/1.0') {
     return NextResponse.json({ error: 'Unauthorized: Invalid user-agent.' }, { status: 401 });
@@ -263,14 +257,15 @@ export async function GET(request: NextRequest) {
     const firestore = initializeFirebaseAdmin();
     const siteUrl = 'sc-domain:hypefresh.com';
 
-    // 2. Fetch historical data with optimized query
+    console.log('[Cron Job] Starting enhanced daily analytics and tiering...');
+
+    // 1. Run your existing enhanced smart metrics calculation
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 60); // 60 days for robust analysis
+    startDate.setDate(endDate.getDate() - 60);
 
     const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-    // Single query to minimize Firestore reads
     const snapshot = await firestore
       .collection('analytics_agg')
       .where('siteUrl', '==', siteUrl)
@@ -279,150 +274,133 @@ export async function GET(request: NextRequest) {
       .orderBy('date', 'asc')
       .get();
 
-    if (snapshot.empty) {
-      throw new Error('No historical data found.');
-    }
-
-    const historicalData: AnalyticsAggData[] = snapshot.docs.map(doc => doc.data() as AnalyticsAggData);
-    const dataLength = historicalData.length;
-
-    console.log(`[Cron Job] Processing ${dataLength} days of data for enhanced analytics.`);
-
-    // 3. Calculate Enhanced Smart Metrics
-    const metricKeys: (keyof Omit<AnalyticsAggData, 'date' | 'siteUrl' | 'aggregatesByCountry' | 'aggregatesByDevice'>)[] =
-      ['totalClicks', 'totalImpressions', 'averageCtr', 'averagePosition'];
-
-    const metrics: { [key: string]: SmartMetric } = {};
-
-    for (const key of metricKeys) {
-      const dataSeries = historicalData.map(d => d[key] as number);
-      const latestValue = dataSeries[dataSeries.length - 1];
-      const { mean: historicalAvg } = getStats(dataSeries);
-
-      // Get industry benchmarks
-      const externalBenchmarks = getIndustryBenchmarks(key);
-
-      // Initialize SmartMetric with enhanced structure
-      let smartMetric: SmartMetric = {
-        isAnomaly: null,
-        message: 'Insufficient data for analysis.',
-        trend: null,
-        trendConfidence: null,
-        thirtyDayForecast: null,
-        benchmarks: {
-          industry: externalBenchmarks.industry,
-          competitors: externalBenchmarks.competitors,
-          historicalAvg
-        },
-        recommendations: ['Collect more daily data for comprehensive analysis.'],
-        forecastUpperBound: null,
-        forecastLowerBound: null,
-      };
-
-      // Calculate Trend & Forecast if enough data exists (≥ 7 days)
-      if (dataLength >= 7) {
-        const { m, b, rSquared, trend } = trendAnalysis(dataSeries);
-
-        // Set trend based on slope with better thresholds
-        smartMetric.trend = trend;
-        smartMetric.trendConfidence = rSquared;
-
-        // Calculate 30-day forecast
-        const forecast = Math.max(0, m * (dataLength + 29) + b);
-        smartMetric.thirtyDayForecast = forecast;
-
-        // Calculate enhanced predictive overlay bounds
-        const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast, dataSeries, rSquared);
-        smartMetric.forecastUpperBound = upperBound;
-        smartMetric.forecastLowerBound = lowerBound;
-      }
-
-      // Calculate Anomaly if enough data exists (≥ 14 days)
-      if (dataLength >= 14) {
-        const recentData = dataSeries.slice(-Math.min(28, dataLength));
-        const anomalyInfo = detectAnomaly(latestValue, recentData);
-        smartMetric.isAnomaly = anomalyInfo.isAnomaly;
-        smartMetric.message = anomalyInfo.message;
-      }
-
-      // Generate enhanced recommendations
-      smartMetric.recommendations = generateRecommendations(key, smartMetric);
-      metrics[key] = smartMetric;
-    }
-
-    // 4. Calculate Health Score (adaptive)
+    let smartMetricsResult = null;
     let healthScore: HealthScore | null = null;
-    if (dataLength >= 14) {
-      const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
-      const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
-      const userExperienceScore = calculateUserExperienceScore(metrics.averageCtr.benchmarks.historicalAvg);
-      const authorityScore = calculateAuthorityScore();
 
-      const overallScore = Math.round(
-        (technicalScore.score * 0.3) +
-        (contentScore.score * 0.3) +
-        (userExperienceScore.score * 0.25) +
-        (authorityScore.score * 0.15)
-      );
+    if (!snapshot.empty) {
+      const historicalData: AnalyticsAggData[] = snapshot.docs.map(doc => doc.data() as AnalyticsAggData);
+      const dataLength = historicalData.length;
 
-      healthScore = {
-        overall: overallScore,
-        technical: technicalScore,
-        content: contentScore,
-        userExperience: userExperienceScore,
-        authority: authorityScore,
+      const metricKeys: (keyof Omit<AnalyticsAggData, 'date' | 'siteUrl' | 'aggregatesByCountry' | 'aggregatesByDevice'>)[] =
+        ['totalClicks', 'totalImpressions', 'averageCtr', 'averagePosition'];
+
+      const metrics: { [key: string]: SmartMetric } = {};
+
+      for (const key of metricKeys) {
+        const dataSeries = historicalData.map(d => d[key] as number);
+        const latestValue = dataSeries[dataSeries.length - 1];
+        const { mean: historicalAvg } = getStats(dataSeries);
+
+        const externalBenchmarks = getIndustryBenchmarks(key);
+
+        let smartMetric: SmartMetric = {
+          isAnomaly: null,
+          message: 'Insufficient data for analysis.',
+          trend: null,
+          trendConfidence: null,
+          thirtyDayForecast: null,
+          benchmarks: {
+            industry: externalBenchmarks.industry,
+            competitors: externalBenchmarks.competitors,
+            historicalAvg
+          },
+          recommendations: ['Collect more daily data for comprehensive analysis.'],
+          forecastUpperBound: null,
+          forecastLowerBound: null,
+        };
+
+        if (dataLength >= 7) {
+          const { m, b, rSquared, trend } = trendAnalysis(dataSeries);
+          smartMetric.trend = trend;
+          smartMetric.trendConfidence = rSquared;
+          const forecast = Math.max(0, m * (dataLength + 29) + b);
+          smartMetric.thirtyDayForecast = forecast;
+          const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast, dataSeries, rSquared);
+          smartMetric.forecastUpperBound = upperBound;
+          smartMetric.forecastLowerBound = lowerBound;
+        }
+
+        if (dataLength >= 14) {
+          const recentData = dataSeries.slice(-Math.min(28, dataLength));
+          const anomalyInfo = detectAnomaly(latestValue, recentData);
+          smartMetric.isAnomaly = anomalyInfo.isAnomaly;
+          smartMetric.message = anomalyInfo.message;
+        }
+
+        smartMetric.recommendations = generateRecommendations(key, smartMetric);
+        metrics[key] = smartMetric;
+      }
+
+      if (dataLength >= 14) {
+        const technicalScore = calculateTechnicalScore(metrics.averagePosition.benchmarks.historicalAvg);
+        const contentScore = calculateContentScore(metrics.averageCtr.benchmarks.historicalAvg);
+        const userExperienceScore = calculateUserExperienceScore(metrics.averageCtr.benchmarks.historicalAvg);
+        const authorityScore = calculateAuthorityScore();
+        const overallScore = Math.round(
+          (technicalScore.score * 0.3) +
+          (contentScore.score * 0.3) +
+          (userExperienceScore.score * 0.25) +
+          (authorityScore.score * 0.15)
+        );
+        healthScore = {
+          overall: overallScore,
+          technical: technicalScore,
+          content: contentScore,
+          userExperience: userExperienceScore,
+          authority: authorityScore,
+        };
+      }
+
+      smartMetricsResult = {
+        status: 'success',
+        lastUpdated: new Date().toISOString(),
+        siteUrl,
+        dataPointsAnalyzed: dataLength,
+        metrics,
+        healthScore,
       };
+
+      // Save smart metrics
+      await firestore.collection('dashboard_stats').doc('latest').set(smartMetricsResult);
     }
 
-    // 5. Prepare enhanced result document
-    const resultDocument = {
+    // 2. Run the NEW enhanced page tiering system
+    console.log('[Cron Job] Running advanced page tiering...');
+    const tieringResult = await runAdvancedPageTiering(firestore);
+
+    // 3. Create comprehensive response
+    const response = {
       status: 'success',
-      lastUpdated: new Date().toISOString(),
-      siteUrl,
-      dataPointsAnalyzed: dataLength,
-      metrics,
-      healthScore,
-      analysisQuality: {
-        trendAnalysis: dataLength >= 7 ? 'available' : 'limited',
-        anomalyDetection: dataLength >= 14 ? 'available' : 'limited',
-        healthScore: dataLength >= 14 ? 'available' : 'pending',
-        recommendations: 'available'
-      }
+      message: 'Enhanced analytics and tiering completed successfully',
+      timestamp: new Date().toISOString(),
+      smartMetrics: smartMetricsResult ? {
+        dataPointsProcessed: smartMetricsResult.dataPointsAnalyzed,
+        healthScoreAvailable: !!healthScore,
+        metricsStatus: 'updated'
+      } : { status: 'no_data' },
+      pagetiering: {
+        pagesProcessed: tieringResult.processed,
+        tierDistribution: tieringResult.tiers,
+        status: 'completed'
+      },
+      recommendations: generateActionableRecommendations(tieringResult.tiers)
     };
 
-    // 6. Save to Firestore (single write operation)
-    await firestore.collection('dashboard_stats').doc('latest').set(resultDocument);
-
-    console.log(`[Cron Job] Enhanced analytics completed. Processed ${dataLength} data points.`);
-
-    // Run the page tiering logic
-    await runAdvancedPageTiering(firestore);
-
-    return NextResponse.json({
-      status: 'success',
-      message: 'Enhanced smart metrics calculation completed.',
-      dataPointsProcessed: dataLength,
-      featuresEnabled: {
-        trendConfidence: dataLength >= 7,
-        anomalyDetection: dataLength >= 14,
-        healthScore: dataLength >= 14,
-        benchmarkComparison: true,
-        recommendations: true
-      }
-    });
+    console.log('[Cron Job] Enhanced processing completed:', response);
+    return NextResponse.json(response);
 
   } catch (error) {
-    console.error('[Cron Job] Enhanced analytics generation failed:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+    console.error('[Cron Job] Enhanced analytics failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    // Save error state to Firestore for frontend handling
+    // Save error state
     try {
       const firestore = initializeFirebaseAdmin();
       await firestore.collection('dashboard_stats').doc('latest').set({
         status: 'error',
         lastUpdated: new Date().toISOString(),
         error: errorMessage,
-        message: 'Analytics generation failed. Please check data ingestion.'
+        message: 'Enhanced analytics generation failed'
       });
     } catch (saveError) {
       console.error('[Cron Job] Failed to save error state:', saveError);
@@ -430,8 +408,62 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       status: 'error',
-      message: 'Enhanced analytics generation failed.',
+      message: 'Enhanced analytics generation failed',
       details: errorMessage
     }, { status: 500 });
   }
+}
+
+// Generate actionable recommendations based on tier distribution
+function generateActionableRecommendations(tiers: Record<string, number>) {
+  const recommendations = [];
+  const totalPages = Object.values(tiers).reduce((sum, count) => sum + count, 0);
+
+  if (tiers['At Risk'] > 0) {
+    recommendations.push({
+      priority: 'Critical',
+      action: `Immediate attention needed: ${tiers['At Risk']} pages are at risk of losing significant traffic`,
+      impact: 'High',
+      timeframe: 'This week'
+    });
+  }
+
+  if (tiers['Quick Wins'] > 0) {
+    recommendations.push({
+      priority: 'High',
+      action: `Low-effort high-impact: ${tiers['Quick Wins']} pages need title/meta optimization`,
+      impact: 'Medium-High',
+      timeframe: '1-2 weeks'
+    });
+  }
+
+  if (tiers['Rising Stars'] > 0) {
+    recommendations.push({
+      priority: 'Medium',
+      action: `Amplify success: ${tiers['Rising Stars']} pages showing strong growth - replicate strategies`,
+      impact: 'Medium',
+      timeframe: '2-4 weeks'
+    });
+  }
+
+  if (tiers['Hidden Gems'] > 0) {
+    recommendations.push({
+      priority: 'Medium',
+      action: `Unlock potential: ${tiers['Hidden Gems']} pages have good rankings but poor CTR`,
+      impact: 'Medium',
+      timeframe: '2-3 weeks'
+    });
+  }
+
+  const problemRatio = (tiers['Problem Pages'] + tiers['At Risk']) / totalPages;
+  if (problemRatio > 0.2) {
+    recommendations.push({
+      priority: 'High',
+      action: `Site health concern: ${(problemRatio * 100).toFixed(0)}% of pages need significant work`,
+      impact: 'High',
+      timeframe: 'Strategic review needed'
+    });
+  }
+
+  return recommendations;
 }

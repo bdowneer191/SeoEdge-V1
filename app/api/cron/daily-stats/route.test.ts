@@ -2,7 +2,7 @@ import { GET } from './route';
 import { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
-import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
+import { runAdvancedPageTiering } from './enhanced-tiering';
 
 // Mock dependencies
 jest.mock('@/lib/firebaseAdmin', () => ({
@@ -13,7 +13,7 @@ jest.mock('@/lib/analytics/trend', () => ({
   trendAnalysis: jest.fn(),
 }));
 
-jest.mock('@/lib/analytics/tiering', () => ({
+jest.mock('./enhanced-tiering', () => ({
   runAdvancedPageTiering: jest.fn(),
 }));
 
@@ -32,15 +32,11 @@ describe('Daily Stats Cron Job API', () => {
       doc: jest.fn().mockReturnThis(),
       set: jest.fn().mockResolvedValue(undefined),
       get: jest.fn(),
-      batch: jest.fn(() => ({
-        update: jest.fn(),
-        commit: jest.fn().mockResolvedValue(undefined),
-      })),
     };
     (initializeFirebaseAdmin as jest.Mock).mockReturnValue(firestoreMock);
   });
 
-  it('should calculate daily stats and trigger advanced page tiering', async () => {
+  it('should run daily stats and advanced tiering, and return a comprehensive response', async () => {
     // Mock data for daily stats
     const dailyStatsDocs = [
       { data: () => ({ totalClicks: 100, totalImpressions: 1000, averageCtr: 0.1, averagePosition: 10 }) },
@@ -48,6 +44,13 @@ describe('Daily Stats Cron Job API', () => {
     ];
     firestoreMock.get.mockResolvedValueOnce({ empty: false, docs: dailyStatsDocs });
     (trendAnalysis as jest.Mock).mockReturnValue({ trend: 'stable', rSquared: 0.1 });
+
+    // Mock result from advanced tiering
+    const tieringResult = {
+      processed: 10,
+      tiers: { 'Champions': 1, 'Rising Stars': 2, 'At Risk': 1 },
+    };
+    (runAdvancedPageTiering as jest.Mock).mockResolvedValue(tieringResult);
 
     const request = new NextRequest('https://test.com/api/cron/daily-stats?secret=test_secret');
     request.headers.set('user-agent', 'vercel-cron/1.0');
@@ -58,13 +61,19 @@ describe('Daily Stats Cron Job API', () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe('success');
+    expect(body.message).toBe('Enhanced analytics and tiering completed successfully');
 
-    // Verify daily stats was called
+    // Verify daily stats was called and saved
     expect(firestoreMock.collection).toHaveBeenCalledWith('dashboard_stats');
     expect(firestoreMock.doc).toHaveBeenCalledWith('latest');
     expect(firestoreMock.set).toHaveBeenCalled();
 
     // Verify advanced page tiering was called
     expect(runAdvancedPageTiering).toHaveBeenCalledWith(firestoreMock);
+
+    // Verify response structure
+    expect(body.pagetiering.pagesProcessed).toBe(10);
+    expect(body.pagetiering.tierDistribution).toEqual({ 'Champions': 1, 'Rising Stars': 2, 'At Risk': 1 });
+    expect(body.recommendations).toHaveLength(2); // At Risk and Rising Stars
   });
 });

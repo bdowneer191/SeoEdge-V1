@@ -1,4 +1,4 @@
-import { runAdvancedPageTiering } from './tiering';
+import { runAdvancedPageTiering } from './enhanced-tiering';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
 
