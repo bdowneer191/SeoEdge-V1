@@ -15,11 +15,21 @@ export async function GET(request: NextRequest) {
     const firestore = initializeFirebaseAdmin();
     const { searchParams } = new URL(request.url);
     const tier = searchParams.get('tier');
+    const days = searchParams.get('days');
 
     let query: FirebaseFirestore.Query = firestore.collection('pages');
 
     if (tier) {
       query = query.where('performance_tier', '==', tier);
+    }
+
+    if (days) {
+      const numDays = parseInt(days, 10);
+      if (!isNaN(numDays)) {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - numDays);
+        query = query.where('last_tiering_run', '>=', startDate.toISOString());
+      }
     }
 
     const snapshot = await query.get();

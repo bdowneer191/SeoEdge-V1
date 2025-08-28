@@ -19,10 +19,20 @@ type Page = {
   title: string;
   performance_tier: 'Winners' | 'Declining' | 'Opportunities' | 'Stable';
   performance_reason: string;
-  changeVsBaseline: number; // Placeholder, not from API
+  metrics: {
+    change: {
+      clicks: number;
+    }
+  }
 };
 
 const TABS = ["All Pages", "Winners", "Declining", "Opportunities", "Stable"];
+const DATE_RANGES = [
+  { label: "Last 7 Days", value: 7 },
+  { label: "Last 30 Days", value: 30 },
+  { label: "Last 90 Days", value: 90 },
+  { label: "Last 365 Days", value: 365 },
+];
 
 // Helper component for rendering the tier pill
 const tierStyles = {
@@ -64,6 +74,7 @@ const TierPill = ({ tier }: { tier: Page['performance_tier'] }) => {
 
 const PagesListTable = () => {
   const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [dateRange, setDateRange] = useState(DATE_RANGES[1].value); // Default to 30 days
   const [pages, setPages] = useState<Page[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -72,18 +83,11 @@ const PagesListTable = () => {
       setIsLoading(true);
       try {
         const tier = activeTab === "All Pages" ? "" : activeTab;
-        const response = await fetch(`/api/pages/tiers?tier=${tier}`);
+        const response = await fetch(`/api/pages/tiers?tier=${tier}&days=${dateRange}`);
         if (!response.ok) {
           throw new Error('Failed to fetch data');
         }
-        let data = await response.json();
-
-        // TEMPORARY: Add mock data for changeVsBaseline until API provides it
-        data = data.map((page: Omit<Page, 'changeVsBaseline'>) => ({
-          ...page,
-          changeVsBaseline: Math.random() * 20 - 10, // Random number between -10 and 10
-        }));
-
+        const data = await response.json();
         setPages(data);
       } catch (error) {
         console.error("Error fetching pages:", error);
@@ -94,7 +98,7 @@ const PagesListTable = () => {
     };
 
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, dateRange]);
 
   const handleTabClick = (tab: string) => {
     setActiveTab(tab);
@@ -106,8 +110,8 @@ const PagesListTable = () => {
 
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-      {/* Tabs */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+      {/* Tabs & Filters */}
+      <div className="p-4 border-b border-gray-200 dark:border-gray-800 space-y-4">
         <div className="flex items-center space-x-2 overflow-x-auto pb-2">
           {TABS.map((tab) => (
             <button
@@ -121,6 +125,23 @@ const PagesListTable = () => {
               )}
             >
               {tab}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Date Range:</span>
+          {DATE_RANGES.map((range) => (
+            <button
+              key={range.value}
+              onClick={() => setDateRange(range.value)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-full transition-colors",
+                dateRange === range.value
+                  ? "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white"
+                  : "text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
+              )}
+            >
+              {range.label}
             </button>
           ))}
         </div>
@@ -169,14 +190,14 @@ const PagesListTable = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className={cn(
                       "flex items-center",
-                      page.changeVsBaseline >= 0 ? "text-green-600" : "text-red-600"
+                      page.metrics.change.clicks >= 0 ? "text-green-600" : "text-red-600"
                     )}>
-                      {page.changeVsBaseline >= 0 ? (
+                      {page.metrics.change.clicks >= 0 ? (
                         <ArrowUp className="w-4 h-4 mr-1 flex-shrink-0" />
                       ) : (
                         <ArrowDown className="w-4 h-4 mr-1 flex-shrink-0" />
                       )}
-                      <span>{Math.abs(page.changeVsBaseline).toFixed(1)}%</span>
+                      <span>{Math.abs(page.metrics.change.clicks * 100).toFixed(1)}%</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">

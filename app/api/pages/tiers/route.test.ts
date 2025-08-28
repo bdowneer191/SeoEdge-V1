@@ -112,4 +112,19 @@ describe('GET /api/pages/tiers', () => {
     expect(response.status).toBe(500);
     expect(body.error).toBe('Failed to fetch pages.');
   });
+
+  it('should filter by date when "days" query param is provided', async () => {
+    mockGet.mockResolvedValue({
+      empty: false,
+      docs: [mockDocs[0]],
+    });
+
+    const request = new NextRequest('http://localhost/api/pages/tiers?days=7');
+    await GET(request);
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    expect(mockWhere).toHaveBeenCalledWith('last_tiering_run', '>=', expect.stringMatching(sevenDaysAgo.toISOString().substring(0, 10)));
+  });
 });
