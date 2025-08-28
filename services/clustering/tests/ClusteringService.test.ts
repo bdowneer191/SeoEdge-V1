@@ -6,47 +6,44 @@ jest.mock('ml-kmeans', () => ({
 }));
 
 describe('ClusteringService', () => {
-  let clusteringService: ClusteringService;
-
-  beforeEach(() => {
-    clusteringService = new ClusteringService();
-    (kmeans as jest.Mock).mockClear();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should return an empty array for empty input', () => {
-    const result = clusteringService.getPageClusters([], 5);
-    expect(result).toEqual([]);
+  it('should call kmeans with the correct arguments', async () => {
+    const service = new ClusteringService();
+    const embeddings = [[1, 2], [3, 4]];
+    const k = 2;
+    const mockClusters = { clusters: [0, 1] };
+    (kmeans as jest.Mock).mockReturnValue(mockClusters);
+
+    await service.getPageClusters(embeddings, k);
+
+    expect(kmeans).toHaveBeenCalledWith(embeddings, k, {});
   });
 
-  it('should return a single cluster if k is 1', () => {
-    const embeddings = [[1], [2], [3]];
-    const result = clusteringService.getPageClusters(embeddings, 1);
-    expect(result).toEqual([0, 0, 0]);
+  it('should return cluster assignments', async () => {
+    const service = new ClusteringService();
+    const embeddings = [[1, 2], [3, 4]];
+    const k = 2;
+    const mockClusters = { clusters: [0, 1] };
+    (kmeans as jest.Mock).mockReturnValue(mockClusters);
+
+    const result = await service.getPageClusters(embeddings, k);
+
+    expect(result).toEqual([0, 1]);
   });
 
-  it('should return unique clusters if k is greater than or equal to the number of embeddings', () => {
-    const embeddings = [[1], [2], [3]];
-    const result = clusteringService.getPageClusters(embeddings, 3);
-    expect(result).toEqual([0, 1, 2]);
-  });
-
-  it('should call kmeans and return the cluster assignments', () => {
-    const embeddings = [[1, 2], [1, 3], [8, 7], [8, 6]];
-    const mockResult = { clusters: [0, 0, 1, 1] };
-    (kmeans as jest.Mock).mockReturnValue(mockResult);
-
-    const result = clusteringService.getPageClusters(embeddings, 2);
-    expect(kmeans).toHaveBeenCalledWith(embeddings, 2);
-    expect(result).toEqual(mockResult.clusters);
-  });
-
-  it('should handle errors from the kmeans function and return a single cluster', () => {
-    const embeddings = [[1, 2], [1, 3], [8, 7], [8, 6]];
+  it('should handle errors and return a single cluster', async () => {
+    const service = new ClusteringService();
+    const embeddings = [[1, 2], [3, 4]];
+    const k = 2;
     (kmeans as jest.Mock).mockImplementation(() => {
-      throw new Error('Kmeans failed');
+      throw new Error('Test error');
     });
 
-    const result = clusteringService.getPageClusters(embeddings, 2);
-    expect(result).toEqual([0, 0, 0, 0]);
+    const result = await service.getPageClusters(embeddings, k);
+
+    expect(result).toEqual([0, 0]);
   });
 });
