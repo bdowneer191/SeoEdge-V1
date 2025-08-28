@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/daily-stats?secret=1Kk8_ArD8PL5",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/page-tiering?secret=1Kk8_ArD8PL5",
-      "schedule": "0 4 * * 0"
     }
   ]
 }
