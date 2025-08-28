@@ -2,6 +2,7 @@ import { GET } from './route';
 import { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
+import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
 
 // Mock dependencies
 jest.mock('@/lib/firebaseAdmin', () => ({
@@ -10,6 +11,10 @@ jest.mock('@/lib/firebaseAdmin', () => ({
 
 jest.mock('@/lib/analytics/trend', () => ({
   trendAnalysis: jest.fn(),
+}));
+
+jest.mock('@/lib/analytics/tiering', () => ({
+  runAdvancedPageTiering: jest.fn(),
 }));
 
 describe('Daily Stats Cron Job API', () => {
@@ -35,27 +40,13 @@ describe('Daily Stats Cron Job API', () => {
     (initializeFirebaseAdmin as jest.Mock).mockReturnValue(firestoreMock);
   });
 
-  it('should calculate daily stats and run page tiering successfully', async () => {
+  it('should calculate daily stats and trigger advanced page tiering', async () => {
     // Mock data for daily stats
     const dailyStatsDocs = [
       { data: () => ({ totalClicks: 100, totalImpressions: 1000, averageCtr: 0.1, averagePosition: 10 }) },
       { data: () => ({ totalClicks: 110, totalImpressions: 1100, averageCtr: 0.1, averagePosition: 9 }) },
     ];
-
-    // Mock data for page tiering
-    const pageDoc = {
-      id: 'https://example.com/stable',
-      data: () => ({ siteUrl: 'test.com' }),
-    };
-    const recentAnalytics = [{ totalClicks: 102, totalImpressions: 1000 }];
-    const baselineAnalytics = [{ totalClicks: 100, totalImpressions: 1000 }];
-
-    firestoreMock.get
-      .mockResolvedValueOnce({ empty: false, docs: dailyStatsDocs }) // For daily stats
-      .mockResolvedValueOnce({ empty: false, docs: [pageDoc] }) // For page tiering pages
-      .mockResolvedValueOnce({ docs: recentAnalytics.map(d => ({ data: () => d })) }) // For recent analytics
-      .mockResolvedValueOnce({ docs: baselineAnalytics.map(d => ({ data: () => d })) }); // For baseline analytics
-
+    firestoreMock.get.mockResolvedValueOnce({ empty: false, docs: dailyStatsDocs });
     (trendAnalysis as jest.Mock).mockReturnValue({ trend: 'stable', rSquared: 0.1 });
 
     const request = new NextRequest('https://test.com/api/cron/daily-stats?secret=test_secret');
@@ -73,11 +64,7 @@ describe('Daily Stats Cron Job API', () => {
     expect(firestoreMock.doc).toHaveBeenCalledWith('latest');
     expect(firestoreMock.set).toHaveBeenCalled();
 
-    // Verify page tiering was called
-    const batch = firestoreMock.batch();
-    expect(batch.update).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      performance_tier: 'Stable',
-    }));
-    expect(batch.commit).toHaveBeenCalled();
+    // Verify advanced page tiering was called
+    expect(runAdvancedPageTiering).toHaveBeenCalledWith(firestoreMock);
   });
 });
