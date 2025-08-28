@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
-import { runAdvancedPageTiering } from './enhanced-tiering'; // Import our new system
+import { runAdvancedPageTiering } from '../enhanced-tiering'; // Import our new system
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 
 export const dynamic = 'force-dynamic';
@@ -310,8 +310,9 @@ export async function GET(request: NextRequest) {
         };
 
         if (dataLength >= 7) {
-          const { m, b, rSquared, trend } = trendAnalysis(dataSeries);
-          smartMetric.trend = trend;
+          const { m, b, rSquared } = trendAnalysis(dataSeries);
+          const relativeThreshold = historicalAvg * 0.001;
+          smartMetric.trend = m > relativeThreshold ? 'up' : m < -relativeThreshold ? 'down' : 'stable';
           smartMetric.trendConfidence = rSquared;
           const forecast = Math.max(0, m * (dataLength + 29) + b);
           smartMetric.thirtyDayForecast = forecast;
@@ -417,6 +418,7 @@ export async function GET(request: NextRequest) {
 // Generate actionable recommendations based on tier distribution
 function generateActionableRecommendations(tiers: Record<string, number>) {
   const recommendations = [];
+  if (!tiers) return recommendations;
   const totalPages = Object.values(tiers).reduce((sum, count) => sum + count, 0);
 
   if (tiers['At Risk'] > 0) {

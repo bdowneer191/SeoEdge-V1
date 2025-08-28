@@ -9,7 +9,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const navItems = [
     { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '#' },
     { name: 'Reports', icon: ICONS.REPORTS, href: '#' },
-    { name: 'Performance Tiers', icon: ICONS.REPORTS, href: '/performance' },
     { name: 'AI Companion', icon: ICONS.AI_COMPANION, href: '#' },
     { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
   ];
