@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
+import { trendAnalysis } from '@/lib/analytics/trend';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,33 +38,6 @@ interface HealthScore {
 }
 
 // --- Enhanced Statistical & Logic Helper Functions ---
-function trendAnalysis(data: number[]): { m: number; b: number; rSquared: number } {
-  const n = data.length;
-  if (n < 2) return { m: 0, b: n === 1 ? data[0] : 0, rSquared: 1 };
-
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += data[i];
-    sumXY += i * data[i];
-    sumXX += i * i;
-  }
-
-  const m = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX) || 0;
-  const b = (sumY - m * sumX) / n;
-  const yMean = sumY / n;
-
-  let ssTot = 0;
-  let ssRes = 0;
-  for (let i = 0; i < n; i++) {
-    const yPred = m * i + b;
-    ssTot += Math.pow(data[i] - yMean, 2);
-    ssRes += Math.pow(data[i] - yPred, 2);
-  }
-
-  const rSquared = ssTot === 0 ? 1 : Math.max(0, 1 - (ssRes / ssTot));
-  return { m, b, rSquared };
-}
 
 function getStats(data: number[]): { mean: number; stdDev: number } {
   const n = data.length;
@@ -345,11 +319,10 @@ export async function GET(request: NextRequest) {
 
       // Calculate Trend & Forecast if enough data exists (≥ 7 days)
       if (dataLength >= 7) {
-        const { m, b, rSquared } = trendAnalysis(dataSeries);
+        const { m, b, rSquared, trend } = trendAnalysis(dataSeries);
 
         // Set trend based on slope with better thresholds
-        const relativeThreshold = historicalAvg * 0.001; // 0.1% of average as threshold
-        smartMetric.trend = m > relativeThreshold ? 'up' : m < -relativeThreshold ? 'down' : 'stable';
+        smartMetric.trend = trend;
         smartMetric.trendConfidence = rSquared;
 
         // Calculate 30-day forecast
