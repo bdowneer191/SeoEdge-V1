@@ -39,7 +39,7 @@ export async function GET() {
     const now = new Date().toISOString();
 
     uniquePages.forEach(pageUrl => {
-      const pageDocRef = pagesCollectionRef.doc(pageUrl);
+      const pageDocRef = pagesCollectionRef.doc(pageUrl as string);
       batch.set(pageDocRef, {
         url: pageUrl,
         title: pageUrl.split('/').pop() || pageUrl, // Placeholder title
