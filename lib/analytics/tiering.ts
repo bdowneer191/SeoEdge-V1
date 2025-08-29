@@ -71,7 +71,7 @@ async function getPageAnalytics(
 ): Promise<PerformanceMetrics> {
   const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-  const snapshot = await firestore.collection('analytics')
+  const snapshot = await firestore.collection('analytics_agg')
     .where('siteUrl', '==', siteUrl)
     .where('page', '==', pageUrl)
     .where('date', '>=', formatDate(startDate))
