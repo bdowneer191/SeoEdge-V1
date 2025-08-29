@@ -189,7 +189,7 @@ async function getTieringSummary(firestore: FirebaseFirestore.Firestore): Promis
 
     const statsData = statsDoc.data();
     const distribution = (statsData?.tierDistribution || {}) as Record<string, number>;
-    const totalPages = Object.values(distribution).reduce((sum, count) => sum + count, 0);
+    const totalPages = Object.values(distribution).reduce((sum: number, count: number) => sum + count, 0);
 
     // Calculate priority breakdown by querying pages
     const prioritySnapshot = await firestore.collection('pages')
