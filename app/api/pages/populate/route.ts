@@ -14,7 +14,9 @@ export async function GET() {
     console.log('[Pages Population] Starting to populate pages from raw GSC data...');
 
     // Fetch all unique page URLs from the gsc_raw collection
-    const uniquePages = new Set();
+    // Note: This requires a composite index on `page`.
+    // Firestore might auto-generate this on-demand.
+    const uniquePages = new Set<string>();
     const rawDataSnapshot = await firestore.collection('gsc_raw').get();
 
     if (rawDataSnapshot.empty) {
