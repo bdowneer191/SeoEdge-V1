@@ -4,6 +4,7 @@ import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
+import type { PerformanceTier, TierAnalysis } from '@/lib/analytics/tiering';
 
 
 export const dynamic = 'force-dynamic';

@@ -4,7 +4,7 @@ import { trendAnalysis } from '@/lib/analytics/trend';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 
 // Enhanced Performance Tier Types
-type PerformanceTier =
+export type PerformanceTier =
   | 'Champions' // High performing, consistent winners
   | 'Rising Stars' // Strong upward trend, emerging winners
   | 'Cash Cows' // High traffic, stable performance
@@ -24,7 +24,7 @@ interface PerformanceMetrics {
   period: string;
 }
 
-interface TierAnalysis {
+export interface TierAnalysis {
   tier: PerformanceTier;
   score: number; // 0-100 overall performance score
   priority: 'Critical' | 'High' | 'Medium' | 'Low' | 'Monitor';
@@ -452,4 +452,3 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
 // Export the function for use in cron jobs
 export { runAdvancedPageTiering };
-export type { PerformanceTier, TierAnalysis };
