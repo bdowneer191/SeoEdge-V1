@@ -1,11 +1,12 @@
 // Enhanced Performance Tiering Logic for better marketing decisions
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
-import { getOriginalUrlFromPageDoc } from '@/utils/urlSanitizer';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 
 // Enhanced Performance Tier Types
-export type PerformanceTier =
+type PerformanceTier =
   | 'Champions' // High performing, consistent winners
   | 'Rising Stars' // Strong upward trend, emerging winners
   | 'Cash Cows' // High traffic, stable performance
@@ -25,7 +26,7 @@ interface PerformanceMetrics {
   period: string;
 }
 
-export interface TierAnalysis {
+interface TierAnalysis {
   tier: PerformanceTier;
   score: number; // 0-100 overall performance score
   priority: 'Critical' | 'High' | 'Medium' | 'Low' | 'Monitor';
@@ -72,7 +73,7 @@ async function getPageAnalytics(
 ): Promise<PerformanceMetrics> {
   const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-  const snapshot = await firestore.collection('analytics_agg')
+  const snapshot = await firestore.collection('analytics')
     .where('siteUrl', '==', siteUrl)
     .where('page', '==', pageUrl)
     .where('date', '>=', formatDate(startDate))
@@ -335,6 +336,22 @@ function analyzePage(
   };
 }
 
+// URL Sanitization utilities
+function sanitizeUrlForFirestore(url: string): string {
+  if (!url) return '';
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/\//g, '__')
+    .replace(/[#?&=]/g, '_')
+    .replace(/_{3,}/g, '__')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getOriginalUrlFromPageDoc(pageDoc: any): string {
+  const data = pageDoc.data();
+  return data?.originalUrl || data?.url || pageDoc.id.replace(/__/g, '/');
+}
+
 async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
   console.log('[Advanced Tiering] Starting enhanced page tiering analysis...');
 
@@ -351,10 +368,10 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
   const baselineEndDate = new Date(recentStartDate);
   baselineEndDate.setDate(recentStartDate.getDate() - 1);
 
-  // Get all pages
+  // Get all pages - they should now have sanitized IDs
   const pagesSnapshot = await firestore.collection('pages').get();
   if (pagesSnapshot.empty) {
-    console.log('[Advanced Tiering] No pages found.');
+    console.log('[Advanced Tiering] No pages found. Run the migration first.');
     return { processed: 0, tiers: {} };
   }
 
@@ -374,13 +391,13 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
   for (const pageDoc of pagesSnapshot.docs) {
     const pageData = pageDoc.data();
-    const pageUrl = getOriginalUrlFromPageDoc(pageDoc);
+    const originalUrl = getOriginalUrlFromPageDoc(pageDoc); // Get original URL safely
 
     try {
-      // Get analytics for both periods
+      // Get analytics for both periods using the ORIGINAL URL (not document ID)
       const [recentMetrics, baselineMetrics] = await Promise.all([
-        getPageAnalytics(firestore, pageUrl, pageData.siteUrl, recentStartDate, endDate),
-        getPageAnalytics(firestore, pageUrl, pageData.siteUrl, baselineStartDate, baselineEndDate)
+        getPageAnalytics(firestore, originalUrl, pageData.siteUrl, recentStartDate, endDate),
+        getPageAnalytics(firestore, originalUrl, pageData.siteUrl, baselineStartDate, baselineEndDate)
       ]);
 
       // Perform trend analysis on recent data
@@ -389,12 +406,12 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
         : { trend: 'stable', rSquared: 0 };
 
       // Analyze the page
-      const analysis = analyzePage(pageUrl, recentMetrics, baselineMetrics, trend);
+      const analysis = analyzePage(originalUrl, recentMetrics, baselineMetrics, trend);
 
-      // Update the page document
+      // Update the page document with safe data including original URL
       const updateData = {
-        originalUrl: pageUrl,
-        url: pageUrl,
+        originalUrl, // Always store the original URL
+        url: originalUrl, // Backward compatibility
         performance_tier: analysis.tier,
         performance_score: analysis.score,
         performance_priority: analysis.priority,
@@ -418,16 +435,16 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
       };
 
       batch.update(pageDoc.ref, updateData);
-      tierCounts[analysis.tier]++;
+      tierCounts[analysis.tier] = (tierCounts[analysis.tier] || 0) + 1;
       processed++;
 
       // Log high-priority findings
       if (analysis.priority === 'Critical') {
-        console.log(`[Advanced Tiering] CRITICAL: ${pageUrl} - ${analysis.tier}: ${analysis.reasoning}`);
+        console.log(`[Advanced Tiering] CRITICAL: ${originalUrl} - ${analysis.tier}: ${analysis.reasoning}`);
       }
 
     } catch (error) {
-      console.error(`[Advanced Tiering] Error analyzing page ${pageUrl}:`, error);
+      console.error(`[Advanced Tiering] Error analyzing page ${originalUrl}:`, error);
       continue;
     }
   }
@@ -454,4 +471,4 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 }
 
 // Export the function for use in cron jobs
-export { runAdvancedPageTiering };
+export { runAdvancedPageTiering, PerformanceTier, TierAnalysis };
