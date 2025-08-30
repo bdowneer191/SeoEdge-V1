@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { sanitizeUrlForFirestore } from '@/utils/urlSanitizer';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +40,11 @@ export async function GET() {
     const now = new Date().toISOString();
 
     uniquePages.forEach(pageUrl => {
-      const pageDocRef = pagesCollectionRef.doc(pageUrl as string);
+      const sanitizedUrl = sanitizeUrlForFirestore(pageUrl);
+      const pageDocRef = pagesCollectionRef.doc(sanitizedUrl);
       batch.set(pageDocRef, {
         url: pageUrl,
+        originalUrl: pageUrl,
         title: pageUrl.split('/').pop() || pageUrl, // Placeholder title
         siteUrl: 'sc-domain:hypefresh.com', // Replace with your actual site URL
         last_tiering_run: now
