@@ -1,6 +1,7 @@
 // app/api/pages/tiers/route.ts - Enhanced version for better marketing insights
 import { NextResponse } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { getOriginalUrlFromPageDoc } from '@/utils/urlSanitizer';
 import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
     let pages: EnhancedPageData[] = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
-        url: data.url || doc.id,
+        url: getOriginalUrlFromPageDoc(doc),
         title: data.title || 'Untitled Page',
         performance_tier: data.performance_tier || 'Unknown',
         performance_score: data.performance_score || 0,

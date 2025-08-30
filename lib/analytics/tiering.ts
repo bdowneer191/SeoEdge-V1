@@ -1,6 +1,7 @@
 // Enhanced Performance Tiering Logic for better marketing decisions
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
+import { getOriginalUrlFromPageDoc } from '@/utils/urlSanitizer';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 
 // Enhanced Performance Tier Types
@@ -373,7 +374,7 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
   for (const pageDoc of pagesSnapshot.docs) {
     const pageData = pageDoc.data();
-    const pageUrl = pageDoc.id;
+    const pageUrl = getOriginalUrlFromPageDoc(pageDoc);
 
     try {
       // Get analytics for both periods
@@ -392,6 +393,8 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
       // Update the page document
       const updateData = {
+        originalUrl: pageUrl,
+        url: pageUrl,
         performance_tier: analysis.tier,
         performance_score: analysis.score,
         performance_priority: analysis.priority,

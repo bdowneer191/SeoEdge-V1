@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": false
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "lib/**/*.ts",
+    "utils/**/*.ts",
+    "services/ingestion/GSCIngestionService.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts"
+  ]
+}
