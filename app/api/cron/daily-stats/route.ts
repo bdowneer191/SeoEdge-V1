@@ -3,9 +3,140 @@ import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
-import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
-import type { PerformanceTier, TierAnalysis } from '@/lib/analytics/tiering';
 
+
+function sanitizeUrlForFirestore(url: string): string {
+  if (!url) return '';
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/\//g, '__')
+    .replace(/[#?&=]/g, '_')
+    .replace(/_{3,}/g, '__')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getOriginalUrlFromPageDoc(pageDoc: any): string {
+  const data = pageDoc.data();
+  return data?.originalUrl || data?.url || pageDoc.id.replace(/__/g, '/');
+}
+
+// Replace your existing runPageTiering function with this:
+async function runPageTiering(firestore: FirebaseFirestore.Firestore) {
+  console.log('[Cron Job] Starting SAFE page tiering...');
+
+  // Define Time Windows (keep your existing logic)
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() - 2);
+  const recentStartDate = new Date(endDate);
+  recentStartDate.setDate(endDate.getDate() - 28);
+  const baselineStartDate = new Date(recentStartDate);
+  baselineStartDate.setDate(recentStartDate.getDate() - 90);
+
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+  // Get all pages - they now have sanitized IDs
+  const pagesSnapshot = await firestore.collection('pages').get();
+  if (pagesSnapshot.empty) {
+    console.log('[Cron Job] No pages found. Run migration first.');
+    return;
+  }
+
+  const batch = firestore.batch();
+  let processedCount = 0;
+
+  for (const pageDoc of pagesSnapshot.docs) {
+    try {
+      const pageData = pageDoc.data();
+      const originalUrl = getOriginalUrlFromPageDoc(pageDoc); // Get the REAL URL
+
+      console.log(`[Cron Job] Processing: ${originalUrl}`);
+
+      // Fetch analytics using the ORIGINAL URL (not the document ID)
+      const recentAnalyticsSnapshot = await firestore.collection('analytics')
+        .where('siteUrl', '==', pageData.siteUrl)
+        .where('page', '==', originalUrl) // Use original URL for queries
+        .where('date', '>=', formatDate(recentStartDate))
+        .where('date', '<=', formatDate(endDate))
+        .get();
+
+      const baselineAnalyticsSnapshot = await firestore.collection('analytics')
+        .where('siteUrl', '==', pageData.siteUrl)
+        .where('page', '==', originalUrl) // Use original URL for queries
+        .where('date', '>=', formatDate(baselineStartDate))
+        .where('date', '<', formatDate(recentStartDate))
+        .get();
+
+      const recentAnalytics = recentAnalyticsSnapshot.docs.map(doc => doc.data() as AnalyticsAggData);
+      const baselineAnalytics = baselineAnalyticsSnapshot.docs.map(doc => doc.data() as AnalyticsAggData);
+
+      // Calculate metrics (your existing logic)
+      const calculateMetrics = (data: AnalyticsAggData[]) => {
+        if (data.length === 0) return { totalClicks: 0, totalImpressions: 0, averageCtr: 0, dataPoints: [] };
+        const totalClicks = data.reduce((sum, item) => sum + item.totalClicks, 0);
+        const totalImpressions = data.reduce((sum, item) => sum + item.totalImpressions, 0);
+        const averageCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+        return { totalClicks, totalImpressions, averageCtr, dataPoints: data.map(d => d.totalClicks) };
+      };
+
+      const recentMetrics = calculateMetrics(recentAnalytics);
+      const baselineMetrics = calculateMetrics(baselineAnalytics);
+
+      if (recentMetrics.totalClicks === 0 && baselineMetrics.totalClicks === 0) {
+        continue; // Skip pages with no traffic
+      }
+
+      // Perform trend analysis on recent clicks
+      const { trend, rSquared } = trendAnalysis(recentMetrics.dataPoints);
+
+      let performance_tier = 'Stable';
+      let performance_reason = 'Traffic has remained stable with no significant changes.';
+
+      const clicksChange = baselineMetrics.totalClicks > 0 ? (recentMetrics.totalClicks / baselineMetrics.totalClicks) - 1 : Infinity;
+
+      // Assign Performance Tiers (your existing logic but safer thresholds)
+      if (clicksChange < -0.2 && trend === 'down' && rSquared > 0.3) { // More lenient
+        performance_tier = 'Declining';
+        performance_reason = `Lost ${Math.abs(clicksChange * 100).toFixed(0)}% of clicks compared to the previous period.`;
+      } else if (clicksChange > 0.15 && trend === 'up' && rSquared > 0.3) { // More lenient
+        performance_tier = 'Winners';
+        performance_reason = `Gained ${(clicksChange * 100).toFixed(0)}% more clicks compared to the previous period.`;
+      } else if (recentMetrics.totalImpressions > 500 && recentMetrics.averageCtr < 0.03) { // More lenient
+        performance_tier = 'Opportunities';
+        performance_reason = 'Good impressions but low CTR. Optimize titles and meta descriptions.';
+      }
+
+      // Update Firestore with safe data structure
+      const updateData = {
+        originalUrl, // Always store the original URL
+        url: originalUrl, // For backward compatibility
+        performance_tier,
+        performance_reason,
+        last_tiering_run: new Date().toISOString(),
+        metrics: {
+          recent: recentMetrics,
+          baseline: baselineMetrics,
+          change: {
+            clicks: clicksChange
+          }
+        }
+      };
+
+      batch.update(pageDoc.ref, updateData);
+      processedCount++;
+
+      if (processedCount % 10 === 0) {
+        console.log(`[Cron Job] Processed ${processedCount} pages so far...`);
+      }
+
+    } catch (error) {
+      console.error(`[Cron Job] Error processing page ${pageDoc.id}:`, error);
+      continue;
+    }
+  }
+
+  await batch.commit();
+  console.log(`[Cron Job] Safe page tiering completed. Processed ${processedCount} pages.`);
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -397,7 +528,7 @@ export async function GET(request: NextRequest) {
     console.log(`[Cron Job] Enhanced analytics completed. Processed ${dataLength} data points.`);
 
     // Run the page tiering logic
-    await runAdvancedPageTiering(firestore);
+    await runPageTiering(firestore);
 
     return NextResponse.json({
       status: 'success',
