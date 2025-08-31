@@ -376,7 +376,7 @@ const TrafficHealthScore: React.FC<{ data: any }> = ({ data: stats }) => {
                     <div className="flex-shrink-0 flex flex-col items-center mb-8 lg:mb-0">
                         <CircularProgressBar
                             score={healthScore?.overall ?? null}
-                            loading={loading}
+                            loading={false}
                         />
                         <p className="mt-4 text-sm text-gray-400 text-center max-w-xs">
                             {healthScore ? (
