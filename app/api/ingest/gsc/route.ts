@@ -21,27 +21,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Dates must be in YYYY-MM-DD format.' }, { status: 400 });
         }
 
-        // Using a try-catch block for the service instantiation as well
-        try {
-            const ingestionService = new GSCIngestionService();
-
-            // Running this async, but not awaiting it, to avoid long-running serverless function timeouts.
-            // For production, this should be moved to a background job queue (e.g., Google Cloud Tasks).
-            ingestionService.ingestData(siteUrl, startDate, endDate)
-              .then(() => {
-                console.log(`GSC ingestion job completed successfully for ${siteUrl}.`);
-              })
-              .catch((error) => {
-                console.error(`GSC ingestion job failed for ${siteUrl}:`, error);
-              });
-        
-            return NextResponse.json({ message: 'GSC ingestion process started successfully.' }, { status: 202 });
-
-        } catch (error) {
-            console.error('Failed to start GSC ingestion process:', error);
-            const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-            return NextResponse.json({ error: 'Failed to start ingestion process.', details: errorMessage }, { status: 500 });
-        }
+        // The heavy, raw ingestion has been deprecated in favor of automated, lightweight cron jobs.
+        // This endpoint is now a no-op to prevent breaking any existing integrations, but it does not trigger any ingestion.
+        console.log(`[GSC Ingestion] Manual ingestion via POST is deprecated and will be removed. The process now runs on an automated cron schedule.`);
+        return NextResponse.json({ message: 'Manual GSC ingestion is deprecated. Process is now automated.' }, { status: 200 });
 
     } catch (jsonError) {
         return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
