@@ -1,50 +1,38 @@
-import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import { Buffer } from 'node:buffer';
 import { GSCIngestionService } from '../GSCIngestionService';
 import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
-import { normalizeUrl } from '../urlUtils';
 
-// Mock the dependencies
 jest.mock('firebase-admin', () => ({
-  initializeApp: jest.fn(),
-  apps: [],
-  credential: {
-    cert: jest.fn(),
-  },
-  firestore: jest.fn(() => ({
-    batch: jest.fn(() => ({
-      set: jest.fn(),
-      commit: jest.fn().mockResolvedValue(true),
-    })),
-    collection: jest.fn(() => ({
-      doc: jest.fn(),
-    })),
-  })),
-}));
+    initializeApp: jest.fn(),
+    credential: { cert: jest.fn() },
+    firestore: jest.fn(),
+    apps: [],
+}), { virtual: true });
+
 jest.mock('googleapis', () => ({
-  google: {
-    auth: {
-      GoogleAuth: jest.fn(),
-    },
-    searchconsole: jest.fn(),
-  },
-}));
-jest.mock('../urlUtils', () => ({
-  normalizeUrl: jest.fn(url => `${url}/normalized`),
-}));
+    google: {
+        auth: { GoogleAuth: jest.fn() },
+        searchconsole: jest.fn(),
+    }
+}), { virtual: true });
 
 describe('GSCIngestionService', () => {
   let service: GSCIngestionService;
   let mockSearchConsoleQuery: jest.Mock;
+  let mockFirestoreSet: jest.Mock;
+  let mockFirestoreDoc: jest.Mock;
+  let mockFirestoreCollection: jest.Mock;
+  let mockFirestoreBatchSet: jest.Mock;
+  let mockFirestoreBatchCommit: jest.Mock;
+  let mockServerTimestamp: jest.Mock;
 
   beforeEach(() => {
-    // Set up environment variable
     process.env.FIREBASE_ADMIN_SDK_JSON_BASE64 = Buffer.from(
       JSON.stringify({ client_email: 'test@test.com', private_key: 'key' })
     ).toString('base64');
 
-    // Mock GSC API client
     mockSearchConsoleQuery = jest.fn();
     (google.searchconsole as jest.Mock).mockReturnValue({
       searchanalytics: {
@@ -52,102 +40,107 @@ describe('GSCIngestionService', () => {
       },
     });
 
-    // Reset mocks before each test
-    jest.clearAllMocks();
+    mockFirestoreSet = jest.fn();
+    mockFirestoreDoc = jest.fn(() => ({ set: mockFirestoreSet }));
+    mockFirestoreCollection = jest.fn(() => ({ doc: mockFirestoreDoc }));
+    mockFirestoreBatchSet = jest.fn();
+    mockFirestoreBatchCommit = jest.fn().mockResolvedValue(true);
+    mockServerTimestamp = jest.fn(() => 'MOCK_SERVER_TIMESTAMP');
+
+    const firestoreMock = {
+      collection: mockFirestoreCollection,
+      batch: () => ({
+        set: mockFirestoreBatchSet,
+        commit: mockFirestoreBatchCommit,
+      }),
+    };
+
+    (admin.firestore as jest.Mock).mockReturnValue(firestoreMock);
+    (admin.firestore as any).FieldValue = {
+      serverTimestamp: mockServerTimestamp,
+    };
 
     service = new GSCIngestionService();
   });
 
   afterEach(() => {
     delete process.env.FIREBASE_ADMIN_SDK_JSON_BASE64;
+    jest.clearAllMocks();
   });
 
-  const createMockGscRow = (i: number) => ({
-    keys: [
-      '2023-01-01',
-      `query ${i}`,
-      `https://example.com/page${i}`,
-      'DESKTOP',
-      'USA',
-    ],
-    clicks: i,
-    impressions: i * 10,
-    ctr: 0.1,
-    position: i,
+  describe('ingestDailySummary', () => {
+    it('should fetch a daily summary and write it to Firestore', async () => {
+      const mockSummaryRow = {
+        keys: ['2023-01-01'],
+        clicks: 100,
+        impressions: 1000,
+        ctr: 0.1,
+        position: 10,
+      };
+      mockSearchConsoleQuery.mockResolvedValue({ data: { rows: [mockSummaryRow] } });
+
+      await service.ingestDailySummary('sc-domain:example.com', '2023-01-01');
+
+      expect(mockSearchConsoleQuery).toHaveBeenCalledTimes(1);
+      expect(mockFirestoreCollection).toHaveBeenCalledWith('analytics_agg');
+      expect(mockFirestoreDoc).toHaveBeenCalledWith('daily_20230101_sc_domain_example_com');
+      expect(mockFirestoreSet).toHaveBeenCalledWith(expect.objectContaining({
+        totalClicks: 100,
+        totalImpressions: 1000,
+      }));
+    });
   });
 
-  it('should fetch data and write to Firestore in a single batch', async () => {
-    const mockRows = Array.from({ length: 10 }, (_, i) => createMockGscRow(i));
-    mockSearchConsoleQuery.mockResolvedValue({ data: { rows: mockRows } });
+  describe('runSmartAnalytics', () => {
+    beforeAll(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2025-08-31'));
+    });
 
-    await service.ingestData('https://example.com', '2023-01-01', '2023-01-02');
+    afterAll(() => {
+      jest.useRealTimers();
+    });
 
-    expect(mockSearchConsoleQuery).toHaveBeenCalledTimes(1);
-    expect(mockSearchConsoleQuery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        siteUrl: 'https://example.com',
-        requestBody: expect.objectContaining({ startRow: 0, rowLimit: 25000 }),
-      })
-    );
+    it('should identify and store the top losing page', async () => {
+      const period1Rows = [ { keys: ['https://example.com/page1'], clicks: 10, impressions: 100 } ];
+      const period2Rows = [ { keys: ['https://example.com/page1'], clicks: 100, impressions: 1001 } ];
 
-    const mockBatch = (admin.firestore().batch as jest.Mock).mock.results[0].value;
-    expect(mockBatch.set).toHaveBeenCalledTimes(10);
-    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
+      mockSearchConsoleQuery.mockImplementation(async (req) => {
+        const reqStartDate = new Date(req.requestBody.startDate);
 
-    expect(normalizeUrl).toHaveBeenCalledTimes(10);
-    expect(mockBatch.set).toHaveBeenCalledWith(
-      undefined, // We don't care about the doc ref mock
-      expect.objectContaining({
-        page: 'https://example.com/page0/normalized',
-        query: 'query 0',
-      })
-    );
-  });
+        const today = new Date(); // This will be '2025-08-31'
+        const endDate1 = new Date(today);
+        endDate1.setDate(today.getDate() - 1);
+        const startDate1 = new Date(endDate1);
+        startDate1.setDate(endDate1.getDate() - 90);
 
-  it('should handle pagination and multiple batches', async () => {
-    const firstPageRows = Array.from({ length: 25000 }, (_, i) => createMockGscRow(i));
-    const secondPageRows = Array.from({ length: 100 }, (_, i) => createMockGscRow(i + 25000));
+        if (reqStartDate >= startDate1) {
+            return { data: { rows: period1Rows } };
+        }
+        return { data: { rows: period2Rows } };
+      });
 
-    mockSearchConsoleQuery
-      .mockResolvedValueOnce({ data: { rows: firstPageRows } })
-      .mockResolvedValueOnce({ data: { rows: secondPageRows } });
+      await service.runSmartAnalytics('https://example.com');
 
-    // Mock batch creation to return new batch instances
-    const mockBatchCommit = jest.fn().mockResolvedValue(true);
-    const mockBatchSet = jest.fn();
-    (admin.firestore().batch as jest.Mock).mockImplementation(() => ({
-        set: mockBatchSet,
-        commit: mockBatchCommit,
-    }));
+      const expectedChunks = Math.ceil(90 / 14);
+      expect(mockSearchConsoleQuery.mock.calls.length).toBe(expectedChunks * 2);
 
-    await service.ingestData('https://example.com', '2023-01-01', '2023-01-02');
+      expect(mockFirestoreCollection).toHaveBeenCalledWith('pages');
+      expect(mockFirestoreBatchSet).toHaveBeenCalledTimes(1);
+      expect(mockFirestoreBatchCommit).toHaveBeenCalledTimes(1);
 
-    // API calls
-    expect(mockSearchConsoleQuery).toHaveBeenCalledTimes(2);
-    expect(mockSearchConsoleQuery).toHaveBeenCalledWith(expect.objectContaining({ requestBody: expect.objectContaining({ startRow: 0 })}));
-    expect(mockSearchConsoleQuery).toHaveBeenCalledWith(expect.objectContaining({ requestBody: expect.objectContaining({ startRow: 25000 })}));
+      const expectedImpressions1 = 100 * expectedChunks;
+      const expectedImpressions2 = 1001 * expectedChunks;
 
-    // Batching logic (25100 rows, batch size 500)
-    expect(mockBatchSet).toHaveBeenCalledTimes(25100);
-    expect(mockBatchCommit).toHaveBeenCalledTimes(51); // 25000/500 + 1
-  });
-
-  it('should retry on GSC API failure', async () => {
-    mockSearchConsoleQuery
-      .mockRejectedValueOnce(new Error('API rate limit'))
-      .mockResolvedValue({ data: { rows: [createMockGscRow(1)] } });
-
-    // Suppress console.warn for cleaner test output
-    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await service.ingestData('https://example.com', '2023-01-01', '2023-01-02');
-
-    expect(mockSearchConsoleQuery).toHaveBeenCalledTimes(2);
-    expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Retrying in'));
-
-    const mockBatch = (admin.firestore().batch as jest.Mock).mock.results[0].value;
-    expect(mockBatch.commit).toHaveBeenCalledTimes(1);
-
-    consoleWarnSpy.mockRestore();
+      expect(mockFirestoreBatchSet).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          pageUrl: 'https://example.com/page1',
+          last90days_impressions: expectedImpressions1,
+          prev90days_impressions: expectedImpressions2,
+        })
+      );
+      expect(mockServerTimestamp).toHaveBeenCalledTimes(1);
+    });
   });
 });

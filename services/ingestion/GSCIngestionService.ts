@@ -3,24 +3,6 @@ import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
 import { normalizeUrl } from './urlUtils';
 
-// Define the structure for a raw GSC data row in Firestore
-interface GscRawData {
-  siteUrl: string;
-  date: string;
-  query: string;
-  page: string;
-  device: string;
-  country: string;
-  clicks: number;
-  impressions: number;
-  ctr: number;
-  position: number;
-}
-
-const FIRESTORE_COLLECTION = 'gsc_raw';
-const FIRESTORE_BATCH_SIZE = 500;
-const GSC_ROW_LIMIT = 25000; // Max rows per API request
-
 // Copied from AggregationService - this will be the new home for this interface
 export interface AnalyticsAggData {
   date: string;
@@ -108,97 +90,6 @@ export class GSCIngestionService {
   }
 
   /**
-   * Fetches GSC performance data for a given site and date range, and persists it to Firestore.
-   * @param siteUrl The URL of the GSC property.
-   * @param startDate The start date in YYYY-MM-DD format.
-   * @param endDate The end date in YYYY-MM-DD format.
-   * @param searchType Optional search type (e.g., 'web', 'image', 'news').
-   */
-  public async ingestData(siteUrl: string, startDate: string, endDate: string, searchType?: string): Promise<void> {
-    console.log(`Starting GSC data ingestion for ${siteUrl} (${searchType || 'all types'}) from ${startDate} to ${endDate}.`);
-
-    let startRow = 0;
-    let totalRowsFetched = 0;
-    let hasMoreData = true;
-    let batch = this.firestore.batch();
-    let docsInBatch = 0;
-
-    while (hasMoreData) {
-      console.log(`Fetching rows starting from ${startRow}...`);
-
-      const requestBody: any = {
-        startDate,
-        endDate,
-        dimensions: ['date', 'query', 'page', 'device', 'country'],
-        rowLimit: GSC_ROW_LIMIT,
-        startRow,
-      };
-
-      if (searchType) {
-        requestBody.searchType = searchType;
-      }
-
-      const request = {
-        siteUrl,
-        requestBody,
-      };
-
-      const response = await this.fetchWithRetry(request);
-      console.log('GSC API response data:', JSON.stringify(response.data, null, 2));
-      const rows = response.data.rows;
-      console.log(`Received ${rows ? rows.length : 0} rows from GSC.`);
-
-      if (!rows || rows.length === 0) {
-        hasMoreData = false;
-        continue;
-      }
-
-      for (const row of rows) {
-        const [date, query, page, device, country] = row.keys;
-        const normalizedPage = normalizeUrl(page);
-
-        const docData: GscRawData = {
-          siteUrl,
-          date,
-          query,
-          page: normalizedPage,
-          device,
-          country,
-          clicks: row.clicks,
-          impressions: row.impressions,
-          ctr: row.ctr,
-          position: row.position,
-        };
-
-        const docRef = this.firestore.collection(FIRESTORE_COLLECTION).doc();
-        batch.set(docRef, docData);
-        docsInBatch++;
-
-        if (docsInBatch === FIRESTORE_BATCH_SIZE) {
-          await batch.commit();
-          console.log(`Wrote ${docsInBatch} rows to Firestore.`);
-          batch = this.firestore.batch();
-          docsInBatch = 0;
-        }
-      }
-
-      totalRowsFetched += rows.length;
-      if (rows.length < GSC_ROW_LIMIT) {
-        hasMoreData = false;
-      } else {
-        startRow += GSC_ROW_LIMIT;
-      }
-    }
-
-    if (docsInBatch > 0) {
-      await batch.commit();
-      console.log(`Wrote final ${docsInBatch} rows to Firestore.`);
-    }
-
-    console.log(`✅ Ingestion complete. Fetched and wrote ${totalRowsFetched} rows to ${FIRESTORE_COLLECTION}.`);
-  }
-
-  /**
    * Fetches the daily aggregated summary for a site and persists it to Firestore.
    * This is a highly efficient way to get daily totals without processing raw data.
    * @param siteUrl The URL of the GSC property.
@@ -258,5 +149,144 @@ export class GSCIngestionService {
     await this.firestore.collection('analytics_agg').doc(docId).set(docData);
 
     console.log(`✅ Daily summary ingestion complete for ${date}. Wrote summary to analytics_agg/${docId}.`);
+  }
+
+  public async runSmartAnalytics(siteUrl: string): Promise<void> {
+    console.log(`Starting smart analytics for ${siteUrl}.`);
+
+    // 1. Define date ranges
+    const today = new Date();
+    const endDate1 = new Date(today);
+    endDate1.setDate(today.getDate() - 1); // Yesterday
+    const startDate1 = new Date(endDate1);
+    startDate1.setDate(endDate1.getDate() - 90);
+
+    const endDate2 = new Date(startDate1);
+    endDate2.setDate(startDate1.getDate() - 1);
+    const startDate2 = new Date(endDate2);
+    startDate2.setDate(endDate2.getDate() - 90);
+
+    const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+    console.log(`Period 1: ${formatDate(startDate1)} to ${formatDate(endDate1)}`);
+    console.log(`Period 2: ${formatDate(startDate2)} to ${formatDate(endDate2)}`);
+
+    // 2. Fetch data for both periods
+    const period1Data = await this.fetchPerformanceData(siteUrl, formatDate(startDate1), formatDate(endDate1));
+    const period2Data = await this.fetchPerformanceData(siteUrl, formatDate(startDate2), formatDate(endDate2));
+
+    // 3. Compare data and find losers
+    const losers = [];
+    for (const [page, data1] of period1Data.entries()) {
+      const data2 = period2Data.get(page);
+      if (data2 && data2.impressions > 100) { // Add a threshold to avoid noise
+        const impressionChange = (data1.impressions - data2.impressions) / data2.impressions;
+        if (impressionChange < -0.5) {
+          losers.push({
+            page,
+            impressions1: data1.impressions,
+            impressions2: data2.impressions,
+            impressionChange,
+            absoluteImpressionLoss: data2.impressions - data1.impressions,
+          });
+        }
+      }
+    }
+
+    // 4. Sort by absolute loss and get top 50
+    losers.sort((a, b) => b.absoluteImpressionLoss - a.absoluteImpressionLoss);
+    const top50Losers = losers.slice(0, 50);
+
+    // 5. Write to Firestore
+    if (top50Losers.length > 0) {
+      const batch = this.firestore.batch();
+      for (const loser of top50Losers) {
+        const pageId = loser.page.replace(/[^a-zA-Z0-9]/g, '_');
+        const docRef = this.firestore.collection('pages').doc(pageId);
+        batch.set(docRef, {
+          pageUrl: loser.page,
+          last90days_impressions: loser.impressions1,
+          prev90days_impressions: loser.impressions2,
+          impression_change_percentage: loser.impressionChange,
+          lastChecked: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      console.log(`Wrote ${top50Losers.length} losing pages to Firestore.`);
+    } else {
+      console.log('No pages with significant impression loss found.');
+    }
+
+    console.log('Smart analytics finished.');
+  }
+
+  private async fetchPerformanceData(siteUrl: string, startDate: string, endDate: string): Promise<Map<string, { clicks: number, impressions: number }>> {
+    const data = new Map<string, { clicks: number, impressions: number }>();
+    const dateChunks = this.getDateChunks(startDate, endDate, 14);
+
+    for (const chunk of dateChunks) {
+      let startRow = 0;
+      let hasMoreData = true;
+
+      while (hasMoreData) {
+        const requestBody = {
+          startDate: chunk.start,
+          endDate: chunk.end,
+          dimensions: ['page'],
+          rowLimit: 25000,
+          startRow,
+        };
+
+        const request = {
+          siteUrl,
+          requestBody,
+        };
+
+        const response = await this.fetchWithRetry(request);
+        const rows = response.data.rows;
+
+        if (!rows || rows.length === 0) {
+          hasMoreData = false;
+          continue;
+        }
+
+        for (const row of rows) {
+          const page = row.keys[0];
+          const pageData = data.get(page) || { clicks: 0, impressions: 0 };
+          pageData.clicks += row.clicks;
+          pageData.impressions += row.impressions;
+          data.set(page, pageData);
+        }
+
+        if (rows.length < 25000) {
+          hasMoreData = false;
+        } else {
+          startRow += 25000;
+        }
+      }
+    }
+    return data;
+  }
+
+  private getDateChunks(startDate: string, endDate: string, chunkSize: number): { start: string, end: string }[] {
+    const chunks = [];
+    let currentStartDate = new Date(startDate);
+    const finalEndDate = new Date(endDate);
+
+    while (currentStartDate <= finalEndDate) {
+      const currentEndDate = new Date(currentStartDate);
+      currentEndDate.setDate(currentStartDate.getDate() + chunkSize - 1);
+
+      const chunkEnd = currentEndDate > finalEndDate ? finalEndDate : currentEndDate;
+
+      chunks.push({
+        start: currentStartDate.toISOString().split('T')[0],
+        end: chunkEnd.toISOString().split('T')[0],
+      });
+
+      currentStartDate.setDate(currentStartDate.getDate() + chunkSize);
+    }
+
+    return chunks;
   }
 }

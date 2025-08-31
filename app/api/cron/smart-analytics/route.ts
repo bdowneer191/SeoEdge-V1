@@ -5,8 +5,8 @@ import { GSCIngestionService } from '@/services/ingestion/GSCIngestionService';
 export const dynamic = 'force-dynamic';
 
 /**
- * API route for Vercel Cron Jobs to trigger daily GSC data ingestion.
- * This job fetches both the raw data and the daily summary.
+ * API route for Vercel Cron Jobs to trigger smart analytics.
+ * This job identifies pages with significant traffic loss.
  * This endpoint is protected by a secret token.
  */
 export async function GET(request: NextRequest) {
@@ -30,33 +30,24 @@ export async function GET(request: NextRequest) {
 
   try {
     const siteUrl = 'sc-domain:hypefresh.com'; // In a multi-tenant app, this would be dynamic
-
-    // GSC data is usually available after a 2-day delay. We'll fetch for 2 days ago.
-    const dateToFetch = new Date();
-    dateToFetch.setDate(dateToFetch.getDate() - 2);
-    const formattedDate = dateToFetch.toISOString().split('T')[0];
-
-    console.log(`[Cron Job] Starting daily GSC ingestion for ${siteUrl} for date: ${formattedDate}`);
+    console.log(`[Cron Job] Starting smart analytics for ${siteUrl}`);
 
     const ingestionService = new GSCIngestionService();
+    await ingestionService.runSmartAnalytics(siteUrl);
 
-    // Ingest the efficient daily summary for our dashboards
-    console.log('[Cron Job] Ingesting daily summary...');
-    await ingestionService.ingestDailySummary(siteUrl, formattedDate);
-
-    console.log(`[Cron Job] Daily GSC summary ingestion completed successfully for ${formattedDate}.`);
+    console.log(`[Cron Job] Smart analytics completed successfully for ${siteUrl}.`);
 
     return NextResponse.json({
       status: 'success',
-      message: `Daily GSC ingestion completed for ${formattedDate}.`,
+      message: `Smart analytics completed for ${siteUrl}.`,
     });
 
   } catch (error) {
-    console.error('[Cron Job] Daily GSC ingestion failed:', error);
+    console.error('[Cron Job] Smart analytics failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
     return NextResponse.json({
       status: 'error',
-      message: 'Daily GSC ingestion failed.',
+      message: 'Smart analytics failed.',
       details: errorMessage
     }, { status: 500 });
   }
