@@ -101,46 +101,59 @@ describe('GSCIngestionService', () => {
       jest.useRealTimers();
     });
 
-    it('should identify and store the top losing page', async () => {
-      const period1Rows = [ { keys: ['https://example.com/page1'], clicks: 10, impressions: 100 } ];
-      const period2Rows = [ { keys: ['https://example.com/page1'], clicks: 100, impressions: 1001 } ];
+    it('should calculate and store dashboard stats', async () => {
+        const period1Rows = [
+            { keys: ['https://example.com/page1'], clicks: 10, impressions: 100 },
+            { keys: ['https://example.com/page2'], clicks: 200, impressions: 2000 },
+        ];
+        const period2Rows = [
+            { keys: ['https://example.com/page1'], clicks: 100, impressions: 1001 },
+            { keys: ['https://example.com/page2'], clicks: 190, impressions: 1900 },
+        ];
 
-      mockSearchConsoleQuery.mockImplementation(async (req) => {
-        const reqStartDate = new Date(req.requestBody.startDate);
+        const dailyMetricsRows = Array.from({ length: 90 }, (_, i) => ({
+            keys: [`2025-08-${30 - i}`],
+            clicks: 10,
+            impressions: 100,
+            ctr: 0.1,
+            position: 10,
+        }));
 
-        const today = new Date(); // This will be '2025-08-31'
-        const endDate1 = new Date(today);
-        endDate1.setDate(today.getDate() - 1);
-        const startDate1 = new Date(endDate1);
-        startDate1.setDate(endDate1.getDate() - 90);
+        mockSearchConsoleQuery.mockImplementation(async (req) => {
+            const reqStartDate = new Date(req.requestBody.startDate);
+            const today = new Date();
+            const startDate1 = new Date(today);
+            startDate1.setDate(today.getDate() - 91);
 
-        if (reqStartDate >= startDate1) {
-            return { data: { rows: period1Rows } };
-        }
-        return { data: { rows: period2Rows } };
-      });
+            if (req.requestBody.dimensions?.includes('date')) {
+                return { data: { rows: dailyMetricsRows } };
+            }
 
-      await service.runSmartAnalytics('https://example.com');
+            if (reqStartDate >= startDate1) {
+                return { data: { rows: period1Rows } };
+            }
+            return { data: { rows: period2Rows } };
+        });
 
-      const expectedChunks = Math.ceil(90 / 14);
-      expect(mockSearchConsoleQuery.mock.calls.length).toBe(expectedChunks * 2);
+        await service.runSmartAnalytics('https://example.com');
 
-      expect(mockFirestoreCollection).toHaveBeenCalledWith('pages');
-      expect(mockFirestoreBatchSet).toHaveBeenCalledTimes(1);
-      expect(mockFirestoreBatchCommit).toHaveBeenCalledTimes(1);
+        // Check that losing pages are stored
+        expect(mockFirestoreCollection).toHaveBeenCalledWith('pages');
+        expect(mockFirestoreBatchSet).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ pageUrl: 'https://example.com/page1' })
+        );
 
-      const expectedImpressions1 = 100 * expectedChunks;
-      const expectedImpressions2 = 1001 * expectedChunks;
+        // Check that dashboard stats are stored
+        expect(mockFirestoreCollection).toHaveBeenCalledWith('dashboard_stats');
+        expect(mockFirestoreDoc).toHaveBeenCalledWith('latest');
 
-      expect(mockFirestoreBatchSet).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          pageUrl: 'https://example.com/page1',
-          last90days_impressions: expectedImpressions1,
-          prev90days_impressions: expectedImpressions2,
-        })
-      );
-      expect(mockServerTimestamp).toHaveBeenCalledTimes(1);
+        const dashboardData = mockFirestoreSet.mock.calls[0][0];
+        expect(dashboardData.losingPages.length).toBe(1);
+        expect(dashboardData.winningPages.length).toBe(2);
+        expect(dashboardData.winningPages[0].page).toBe('https://example.com/page2');
+        expect(dashboardData.siteSummary.historicalData.length).toBe(90);
+        expect(dashboardData.siteSummary.dashboardStats.metrics.totalClicks.benchmarks.historicalAvg).toBe(900);
     });
   });
 });

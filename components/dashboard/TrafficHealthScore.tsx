@@ -310,48 +310,9 @@ const HealthScoreSkeleton = () => (
 );
 
 // --- Main Component ---
-const TrafficHealthScore: React.FC = () => {
-    const [stats, setStats] = useState<DashboardStats | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                console.log('Fetching dashboard stats...');
-                const response = await fetch('/api/dashboard-stats');
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to fetch dashboard stats');
-                }
-                const result: DashboardStats = await response.json();
-                console.log('Received dashboard stats:', result);
-                setStats(result);
-            } catch (e) {
-                console.error('Error fetching dashboard stats:', e);
-                setError(e instanceof Error ? e.message : 'An unknown error occurred');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+const TrafficHealthScore: React.FC<{ data: any }> = ({ data: stats }) => {
 
     const renderContent = () => {
-        if (loading) return <HealthScoreSkeleton />;
-
-        if (error) {
-            return (
-                <div className="bg-red-900/50 border border-red-700 text-red-300 p-6 rounded-lg flex items-start space-x-3">
-                    <Activity className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                        <h4 className="font-semibold mb-1">Error Loading Health Score</h4>
-                        <p className="text-sm">{error}</p>
-                    </div>
-                </div>
-            );
-        }
-
         if (!stats) {
             return (
                 <div className="text-center py-12 text-gray-400">
@@ -361,7 +322,7 @@ const TrafficHealthScore: React.FC = () => {
             );
         }
 
-        const dataPoints = stats.dataPointsAnalyzed || 0;
+        const dataPoints = stats.dataPointsAnalyzed || 90; // We are using 90 days of data
         console.log('Rendering with dataPoints:', dataPoints, 'stats:', stats);
 
         // Force adaptive calculation if we have ANY data

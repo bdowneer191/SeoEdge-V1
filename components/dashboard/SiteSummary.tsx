@@ -301,97 +301,39 @@ const EnhancedStatCardSkeleton = () => (
 );
 
 // --- Main Component ---
-const SiteSummary: React.FC = () => {
-  const [combinedChartData, setCombinedChartData] = useState<ChartData[] | null>(null);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const formatDate = (d: Date) => d.toISOString().split('T')[0];
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 28);
-
-        // Fetch both historical data and dashboard stats in parallel
-        const [historicalRes, statsRes] = await Promise.all([
-          fetch(`/api/metrics/site?startDate=${formatDate(startDate)}&endDate=${formatDate(endDate)}`),
-          fetch(`/api/dashboard-stats`)
-        ]);
-
-        if (!historicalRes.ok) throw new Error(`API Error (metrics): ${historicalRes.statusText}`);
-        if (!statsRes.ok) {
-          const errorData = await statsRes.json();
-          throw new Error(errorData.error || `API Error (stats): ${statsRes.statusText}`);
-        }
-
-        const historicalResult: SiteMetric[] = await historicalRes.json();
-        const statsResult: DashboardStats = await statsRes.json();
-
-        // Convert historical data to chart format
-        const historicalChartData: ChartData[] = historicalResult.map(item => ({
-          date: item.date,
-          clicks: item.clicks,
-          impressions: item.impressions,
-          ctr: item.ctr,
-          position: item.position,
-          isForecast: false
-        }));
-
-        // Generate forecast data if available
-        const forecastData = generateForecastData(
-          historicalResult,
-          statsResult.metrics?.totalClicks?.thirtyDayForecast || null,
-          statsResult.metrics?.totalClicks?.forecastUpperBound || null,
-          statsResult.metrics?.totalClicks?.forecastLowerBound || null
-        );
-
-        // Combine historical and forecast data
-        const combinedData = [...historicalChartData, ...forecastData];
-
-        setCombinedChartData(combinedData);
-        setDashboardStats(statsResult);
-
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'An unknown error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  if (loading) {
-    return (
-      <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <EnhancedStatCardSkeleton />
-          <EnhancedStatCardSkeleton />
-          <EnhancedStatCardSkeleton />
-          <EnhancedStatCardSkeleton />
-        </div>
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mt-8 h-96 animate-pulse"></div>
-      </>
-    );
+const SiteSummary: React.FC<{ data: any }> = ({ data }) => {
+  if (!data || !data.historicalData || !data.dashboardStats) {
+    return <div className="text-center py-8 text-gray-400">No data available for Site Summary.</div>;
   }
 
-  if (error) {
-    return <div className="bg-red-900/50 text-red-300 p-4 rounded-lg">Error: {error}</div>;
-  }
+  const { historicalData, dashboardStats } = data;
 
-  if (!combinedChartData || !dashboardStats) {
-    return <div className="text-center py-8 text-gray-400">No data available.</div>;
-  }
+  // Generate forecast data if available
+  const forecastData = generateForecastData(
+    historicalData,
+    dashboardStats.metrics?.totalClicks?.thirtyDayForecast || null,
+    dashboardStats.metrics?.totalClicks?.forecastUpperBound || null,
+    dashboardStats.metrics?.totalClicks?.forecastLowerBound || null
+  );
 
-  // Calculate current values from historical data
-  const historicalData = combinedChartData.filter(d => !d.isForecast && d.clicks !== null);
+  // Combine historical and forecast data
+  const historicalChartData: ChartData[] = historicalData.map((item: SiteMetric) => ({
+      date: item.date,
+      clicks: item.clicks,
+      impressions: item.impressions,
+      ctr: item.ctr,
+      position: item.position,
+      isForecast: false
+  }));
+
+  const combinedChartData = [...historicalChartData, ...forecastData];
+
+  // Use the pre-calculated aggregated metrics
   const currentValues = {
-    totalClicks: historicalData.reduce((sum, item) => sum + (item.clicks || 0), 0),
-    totalImpressions: historicalData.reduce((sum, item) => sum + (item.impressions || 0), 0),
-    averageCtr: historicalData.reduce((sum, item) => sum + item.ctr, 0) / historicalData.length,
-    averagePosition: historicalData.reduce((sum, item) => sum + item.position, 0) / historicalData.length
+    totalClicks: dashboardStats.metrics.totalClicks.benchmarks.historicalAvg,
+    totalImpressions: dashboardStats.metrics.totalImpressions.benchmarks.historicalAvg,
+    averageCtr: dashboardStats.metrics.averageCtr.benchmarks.historicalAvg,
+    averagePosition: dashboardStats.metrics.averagePosition.benchmarks.historicalAvg
   };
 
   return (

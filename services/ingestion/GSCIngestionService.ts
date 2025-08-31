@@ -1,5 +1,5 @@
-import { Buffer } from 'node:buffer';
 import * as admin from 'firebase-admin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { google } from 'googleapis';
 import { normalizeUrl } from './urlUtils';
 
@@ -23,31 +23,8 @@ export class GSCIngestionService {
   private searchconsole;
 
   constructor() {
-    this.initializeFirebase();
+    this.firestore = initializeFirebaseAdmin();
     this.initializeGSC();
-  }
-
-  /**
-   * Initializes the Firebase Admin SDK.
-   */
-  private initializeFirebase() {
-    if (admin.apps.length) {
-      this.firestore = admin.firestore();
-      return;
-    }
-
-    const serviceAccountBase64 = process.env.FIREBASE_ADMIN_SDK_JSON_BASE64;
-    if (!serviceAccountBase64) {
-      throw new Error('FIREBASE_ADMIN_SDK_JSON_BASE64 env variable not set.');
-    }
-    const serviceAccountJson = Buffer.from(serviceAccountBase64, 'base64').toString('ascii');
-    const serviceAccount = JSON.parse(serviceAccountJson);
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-
-    this.firestore = admin.firestore();
   }
 
   /**
@@ -197,7 +174,7 @@ export class GSCIngestionService {
     losers.sort((a, b) => b.absoluteImpressionLoss - a.absoluteImpressionLoss);
     const top50Losers = losers.slice(0, 50);
 
-    // 5. Write to Firestore
+    // 5. Write losing pages to Firestore
     if (top50Losers.length > 0) {
       const batch = this.firestore.batch();
       for (const loser of top50Losers) {
@@ -216,6 +193,60 @@ export class GSCIngestionService {
     } else {
       console.log('No pages with significant impression loss found.');
     }
+
+    // 6. Find top 50 winning pages
+    const winners = Array.from(period1Data.entries())
+      .sort(([, dataA], [, dataB]) => dataB.clicks - dataA.clicks)
+      .slice(0, 50)
+      .map(([page, data]) => ({
+        page,
+        clicks: data.clicks,
+        impressions: data.impressions,
+      }));
+
+    // 7. Fetch daily data for the last 90 days for the chart
+    const historicalData = await this.fetchDailyMetricsForRange(siteUrl, formatDate(startDate1), formatDate(endDate1));
+
+    // 8. Calculate site-wide metrics for the last 90 days
+    const siteMetrics90days = historicalData.reduce((acc, item) => ({
+        clicks: acc.clicks + item.clicks,
+        impressions: acc.impressions + item.impressions,
+        ctr: acc.ctr + item.ctr,
+        position: acc.position + item.position,
+    }), { clicks: 0, impressions: 0, ctr: 0, position: 0 });
+
+    const numDays = historicalData.length;
+    if (numDays > 0) {
+        siteMetrics90days.ctr /= numDays;
+        siteMetrics90days.position /= numDays;
+    }
+
+    // 9. Construct the dashboard data object
+    const siteMetricsForDashboard = {
+        totalClicks: { benchmarks: { historicalAvg: siteMetrics90days.clicks }, isAnomaly: null, message: null, trend: null, trendConfidence: null, thirtyDayForecast: null, recommendations: [] },
+        totalImpressions: { benchmarks: { historicalAvg: siteMetrics90days.impressions }, isAnomaly: null, message: null, trend: null, trendConfidence: null, thirtyDayForecast: null, recommendations: [] },
+        averageCtr: { benchmarks: { historicalAvg: siteMetrics90days.ctr }, isAnomaly: null, message: null, trend: null, trendConfidence: null, thirtyDayForecast: null, recommendations: [] },
+        averagePosition: { benchmarks: { historicalAvg: siteMetrics90days.position }, isAnomaly: null, message: null, trend: null, trendConfidence: null, thirtyDayForecast: null, recommendations: [] },
+    };
+
+    const dashboardData = {
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+        siteSummary: {
+            historicalData,
+            dashboardStats: {
+                status: 'success',
+                lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+                metrics: siteMetricsForDashboard,
+            }
+        },
+        losingPages: top50Losers,
+        winningPages: winners,
+    };
+
+    // 10. Write to Firestore
+    await this.firestore.collection('dashboard_stats').doc('latest').set(dashboardData);
+    console.log('Wrote dashboard summary to dashboard_stats/latest.');
+
 
     console.log('Smart analytics finished.');
   }
@@ -288,5 +319,33 @@ export class GSCIngestionService {
     }
 
     return chunks;
+  }
+
+  private async fetchDailyMetricsForRange(siteUrl: string, startDate: string, endDate: string): Promise<{ date: string, clicks: number, impressions: number, ctr: number, position: number }[]> {
+    const requestBody = {
+      startDate,
+      endDate,
+      dimensions: ['date'],
+    };
+
+    const request = {
+      siteUrl,
+      requestBody,
+    };
+
+    const response = await this.fetchWithRetry(request);
+    const rows = response.data.rows;
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    return rows.map((row: any) => ({
+      date: row.keys[0],
+      clicks: row.clicks,
+      impressions: row.impressions,
+      ctr: row.ctr,
+      position: row.position,
+    }));
   }
 }
