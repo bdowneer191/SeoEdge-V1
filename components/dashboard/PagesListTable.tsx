@@ -238,17 +238,22 @@ const PagesListTable = () => {
                       <PriorityPill priority={page.performance_priority} />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className={cn(
-                        "flex items-center",
-                        page.metrics.kpis.clicksChange >= 0 ? "text-green-600" : "text-red-600"
-                      )}>
-                        {page.metrics.kpis.clicksChange >= 0 ? (
-                          <ArrowUp className="w-4 h-4 mr-1 flex-shrink-0" />
-                        ) : (
-                          <ArrowDown className="w-4 h-4 mr-1 flex-shrink-0" />
-                        )}
-                        <span>{Math.abs(page.metrics.kpis.clicksChange * 100).toFixed(1)}%</span>
-                      </div>
+                      {/* ADD THIS CONDITIONAL CHECK */}
+                      {page.metrics?.kpis?.clicksChange !== undefined ? (
+                        <div className={cn(
+                          "flex items-center",
+                          page.metrics.kpis.clicksChange >= 0 ? "text-green-600" : "text-red-600"
+                        )}>
+                          {page.metrics.kpis.clicksChange >= 0 ? (
+                            <ArrowUp className="w-4 h-4 mr-1 flex-shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-4 h-4 mr-1 flex-shrink-0" />
+                          )}
+                          <span>{Math.abs(page.metrics.kpis.clicksChange * 100).toFixed(1)}%</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
                       {page.performance_reasoning}
