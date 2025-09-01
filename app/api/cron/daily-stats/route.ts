@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { trendAnalysis } from '@/lib/analytics/trend';
+import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -37,33 +40,6 @@ interface HealthScore {
 }
 
 // --- Enhanced Statistical & Logic Helper Functions ---
-function trendAnalysis(data: number[]): { m: number; b: number; rSquared: number } {
-  const n = data.length;
-  if (n < 2) return { m: 0, b: n === 1 ? data[0] : 0, rSquared: 1 };
-
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    sumX += i;
-    sumY += data[i];
-    sumXY += i * data[i];
-    sumXX += i * i;
-  }
-
-  const m = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX) || 0;
-  const b = (sumY - m * sumX) / n;
-  const yMean = sumY / n;
-
-  let ssTot = 0;
-  let ssRes = 0;
-  for (let i = 0; i < n; i++) {
-    const yPred = m * i + b;
-    ssTot += Math.pow(data[i] - yMean, 2);
-    ssRes += Math.pow(data[i] - yPred, 2);
-  }
-
-  const rSquared = ssTot === 0 ? 1 : Math.max(0, 1 - (ssRes / ssTot));
-  return { m, b, rSquared };
-}
 
 function getStats(data: number[]): { mean: number; stdDev: number } {
   const n = data.length;
@@ -234,11 +210,38 @@ function calculateAuthorityScore(): HealthScoreComponent {
   };
 }
 
-function calculatePredictiveOverlays(forecast: number): { upperBound: number; lowerBound: number } {
-  // Simple uncertainty range using ±15% for MVP
-  const uncertaintyPercentage = 0.15;
-  const upperBound = forecast * (1 + uncertaintyPercentage);
-  const lowerBound = Math.max(0, forecast * (1 - uncertaintyPercentage));
+// Enhanced predictive overlays calculation with better uncertainty modeling
+function calculatePredictiveOverlays(
+  forecast: number,
+  historicalData: number[],
+  trendConfidence: number | null
+): { upperBound: number; lowerBound: number } {
+
+  // Base uncertainty starts at 15% and adjusts based on trend confidence and data variability
+  let baseUncertainty = 0.15;
+
+  // Adjust uncertainty based on trend confidence
+  if (trendConfidence) {
+    // Lower confidence = higher uncertainty
+    const confidenceAdjustment = (1 - trendConfidence) * 0.2;
+    baseUncertainty += confidenceAdjustment;
+  }
+
+  // Calculate historical volatility if we have enough data
+  if (historicalData.length > 7) {
+    const { stdDev, mean } = getStats(historicalData);
+    const coefficientOfVariation = mean > 0 ? stdDev / mean : 0;
+
+    // Add volatility-based uncertainty (cap at 30%)
+    const volatilityUncertainty = Math.min(0.3, coefficientOfVariation * 0.5);
+    baseUncertainty += volatilityUncertainty;
+  }
+
+  // Cap total uncertainty at 50%
+  const finalUncertainty = Math.min(0.5, baseUncertainty);
+
+  const upperBound = forecast * (1 + finalUncertainty);
+  const lowerBound = Math.max(0, forecast * (1 - finalUncertainty));
 
   return { upperBound, lowerBound };
 }
@@ -318,19 +321,18 @@ export async function GET(request: NextRequest) {
 
       // Calculate Trend & Forecast if enough data exists (≥ 7 days)
       if (dataLength >= 7) {
-        const { m, b, rSquared } = trendAnalysis(dataSeries);
+        const { m, b, rSquared, trend } = trendAnalysis(dataSeries);
 
         // Set trend based on slope with better thresholds
-        const relativeThreshold = historicalAvg * 0.001; // 0.1% of average as threshold
-        smartMetric.trend = m > relativeThreshold ? 'up' : m < -relativeThreshold ? 'down' : 'stable';
+        smartMetric.trend = trend;
         smartMetric.trendConfidence = rSquared;
 
         // Calculate 30-day forecast
         const forecast = Math.max(0, m * (dataLength + 29) + b);
         smartMetric.thirtyDayForecast = forecast;
 
-        // Calculate predictive overlay bounds
-        const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast);
+        // Calculate enhanced predictive overlay bounds
+        const { upperBound, lowerBound } = calculatePredictiveOverlays(forecast, dataSeries, rSquared);
         smartMetric.forecastUpperBound = upperBound;
         smartMetric.forecastLowerBound = lowerBound;
       }
@@ -378,20 +380,30 @@ export async function GET(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
       siteUrl,
       dataPointsAnalyzed: dataLength,
-      metrics,
+      siteSummary: {
+        dashboardStats: {
+          status: 'success',
+          lastUpdated: new Date().toISOString(),
+          metrics,
+        },
+        historicalData,
+      },
       healthScore,
       analysisQuality: {
         trendAnalysis: dataLength >= 7 ? 'available' : 'limited',
         anomalyDetection: dataLength >= 14 ? 'available' : 'limited',
         healthScore: dataLength >= 14 ? 'available' : 'pending',
         recommendations: 'available'
-      }
+      },
     };
 
     // 6. Save to Firestore (single write operation)
     await firestore.collection('dashboard_stats').doc('latest').set(resultDocument);
 
     console.log(`[Cron Job] Enhanced analytics completed. Processed ${dataLength} data points.`);
+
+    // Run the page tiering logic
+    await runAdvancedPageTiering(firestore);
 
     return NextResponse.json({
       status: 'success',
@@ -417,7 +429,8 @@ export async function GET(request: NextRequest) {
         status: 'error',
         lastUpdated: new Date().toISOString(),
         error: errorMessage,
-        message: 'Analytics generation failed. Please check data ingestion.'
+        message: 'Analytics generation failed. Please check data ingestion.',
+        siteSummary: null,
       });
     } catch (saveError) {
       console.error('[Cron Job] Failed to save error state:', saveError);
