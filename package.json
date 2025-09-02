@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "jest",
     "build:scripts": "tsc -p tsconfig.scripts.json",
-    "migrate:urls": "ts-node --project ./tsconfig.ts-node.json utils/urlSanitizer.ts"
+    "migrate:urls": "ts-node --project ./tsconfig.ts-node.json utils/urlSanitizer.ts",
+    "diag": "curl http://localhost:3000/api/diagnostics"
   },
   "dependencies": {
     "clsx": "^2.1.1",
