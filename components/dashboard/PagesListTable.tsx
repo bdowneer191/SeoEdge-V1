@@ -1,284 +1,416 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
-import PagesListTableSkeleton from './PagesListTableSkeleton';
-import { cn } from '@/lib/utils';
-import Link from 'next/link';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, AlertTriangle, Star, Eye, Zap } from 'lucide-react';
 
-import {
-  TrendingUp,
-  TrendingDown,
-  Lightbulb,
-  Minus,
-  ArrowUp,
-  ArrowDown,
-  Sparkles,
-  Shield,
-  Wrench,
-  AlertTriangle,
-  FileQuestion,
-  ChevronDown
-} from 'lucide-react';
-
-// Define the type for a page object from the new tiering logic
-type PerformanceTier =
-  | 'Champions'
-  | 'Rising Stars'
-  | 'Cash Cows'
-  | 'Hidden Gems'
-  | 'Quick Wins'
-  | 'Declining'
-  | 'At Risk'
-  | 'Problem Pages'
-  | 'New/Low Data';
-
-type Page = {
+interface PageData {
   url: string;
   title: string;
-  performance_tier: PerformanceTier;
+  performance_tier: string;
   performance_score: number;
-  performance_priority: 'Critical' | 'High' | 'Medium' | 'Low' | 'Monitor';
+  performance_priority: string;
   performance_reasoning: string;
   marketing_action: string;
   technical_action: string;
-  metrics: {
-    kpis: {
-      clicksChange: number;
-    }
-  }
-};
+  expected_impact: string;
+  timeframe: string;
+  confidence: number;
+  metrics?: {
+    recent?: {
+      totalClicks: number;
+      totalImpressions: number;
+      averageCtr: number;
+    };
+    baseline?: {
+      totalClicks: number;
+      totalImpressions: number;
+      averageCtr: number;
+    };
+    change?: {
+      clicks: number;
+    };
+  };
+  last_tiering_run: string;
+  monthlyClicksPotential?: number;
+  improvementPotential: string;
+  urgencyScore: number;
+  competitiveThreat: string;
+}
 
-const TABS: (PerformanceTier | "All Pages")[] = ["All Pages", "Champions", "Rising Stars", "Cash Cows", "Hidden Gems", "Quick Wins", "Declining", "At Risk", "Problem Pages", "New/Low Data"];
-const DATE_RANGES = [
-  { label: "Last 7 Days", value: 7 },
-  { label: "Last 30 Days", value: 30 },
-  { label: "Last 90 Days", value: 90 },
-  { label: "Last 365 Days", value: 365 },
+interface TierSummary {
+  lastRun: string;
+  totalPages: number;
+  distribution: Record<string, number>;
+  priorityBreakdown: Record<string, number>;
+  keyInsights: Array<{
+    type: string;
+    message: string;
+    count: number;
+    impact: string;
+  }>;
+  recommendations: Array<{
+    priority: string;
+    action: string;
+    pagesAffected: number;
+    estimatedImpact: string;
+    timeframe: string;
+  }>;
+}
+
+const PERFORMANCE_TIERS = [
+  'All Pages',
+  'Champions',
+  'Rising Stars',
+  'Cash Cows',
+  'Quick Wins',
+  'Hidden Gems',
+  'At Risk',
+  'Declining',
+  'Problem Pages',
+  'New/Low Data'
 ];
 
-// Helper component for rendering the tier pill
-const tierStyles: Record<PerformanceTier, { icon: React.ElementType; bgColor: string; textColor: string }> = {
-  Champions: { icon: Sparkles, bgColor: 'bg-green-100 dark:bg-green-900/50', textColor: 'text-green-700 dark:text-green-300' },
-  'Rising Stars': { icon: TrendingUp, bgColor: 'bg-blue-100 dark:bg-blue-900/50', textColor: 'text-blue-700 dark:text-blue-300' },
-  'Cash Cows': { icon: Shield, bgColor: 'bg-gray-100 dark:bg-gray-700', textColor: 'text-gray-600 dark:text-gray-300' },
-  'Hidden Gems': { icon: Lightbulb, bgColor: 'bg-yellow-100 dark:bg-yellow-900/50', textColor: 'text-yellow-700 dark:text-yellow-300' },
-  'Quick Wins': { icon: Wrench, bgColor: 'bg-indigo-100 dark:bg-indigo-900/50', textColor: 'text-indigo-700 dark:text-indigo-300' },
-  Declining: { icon: TrendingDown, bgColor: 'bg-orange-100 dark:bg-orange-900/50', textColor: 'text-orange-700 dark:text-orange-300' },
-  'At Risk': { icon: AlertTriangle, bgColor: 'bg-red-100 dark:bg-red-900/50', textColor: 'text-red-700 dark:text-red-300' },
-  'Problem Pages': { icon: Wrench, bgColor: 'bg-red-200 dark:bg-red-800/50', textColor: 'text-red-800 dark:text-red-200' },
-  'New/Low Data': { icon: FileQuestion, bgColor: 'bg-gray-200 dark:bg-gray-600', textColor: 'text-gray-500 dark:text-gray-400' },
+const TIER_CONFIGS = {
+  'Champions': { color: 'text-green-400', bg: 'bg-green-900/20', icon: Star },
+  'Rising Stars': { color: 'text-blue-400', bg: 'bg-blue-900/20', icon: TrendingUp },
+  'Cash Cows': { color: 'text-purple-400', bg: 'bg-purple-900/20', icon: Star },
+  'Quick Wins': { color: 'text-yellow-400', bg: 'bg-yellow-900/20', icon: Zap },
+  'Hidden Gems': { color: 'text-indigo-400', bg: 'bg-indigo-900/20', icon: Eye },
+  'At Risk': { color: 'text-orange-400', bg: 'bg-orange-900/20', icon: AlertTriangle },
+  'Declining': { color: 'text-red-400', bg: 'bg-red-900/20', icon: TrendingDown },
+  'Problem Pages': { color: 'text-red-500', bg: 'bg-red-900/30', icon: AlertTriangle },
+  'New/Low Data': { color: 'text-gray-400', bg: 'bg-gray-800/50', icon: Eye }
 };
 
-const TierPill = ({ tier }: { tier: Page['performance_tier'] }) => {
-  // Fallback for unexpected tier values
-  const styles = tierStyles[tier] || tierStyles['New/Low Data'];
-  const Icon = styles.icon;
-
-  return (
-    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium', styles.bgColor, styles.textColor)}>
-      <Icon className="w-4 h-4 mr-1.5" />
-      {tier}
-    </span>
-  );
-};
-
-const PriorityPill = ({ priority }: { priority: Page['performance_priority'] }) => {
-  const priorityStyles = {
-    Critical: 'bg-red-500/80 text-white',
-    High: 'bg-yellow-500/80 text-white',
-    Medium: 'bg-blue-500/80 text-white',
-    Low: 'bg-green-500/80 text-white',
-    Monitor: 'bg-gray-500/80 text-white',
-  };
-  return (
-    <span className={cn('px-2 py-1 rounded-md text-xs font-semibold', priorityStyles[priority])}>
-      {priority}
-    </span>
-  );
-};
-
-const ExpandableRow = ({ page }: { page: Page }) => {
-  return (
-    <div className="p-4 bg-gray-50 dark:bg-gray-800/50">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">Marketing Action</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{page.marketing_action}</p>
-        </div>
-        <div>
-          <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">Technical Action</h4>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{page.technical_action}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-const PagesListTable = () => {
-  const [activeTab, setActiveTab] = useState<(PerformanceTier | "All Pages")>(TABS[0]);
-  const [dateRange, setDateRange] = useState(DATE_RANGES[1].value); // Default to 30 days
-  const [pages, setPages] = useState<Page[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+export default function PagesListTable() {
+  const [pages, setPages] = useState<PageData[]>([]);
+  const [summary, setSummary] = useState<TierSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTier, setSelectedTier] = useState('All Pages');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const tier = activeTab === "All Pages" ? "" : activeTab;
-        const response = await fetch(`/api/pages/tiers?tier=${tier}&days=${dateRange}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch data');
-        }
-        const data = await response.json();
-        setPages(data);
-      } catch (error) {
-        console.error("Error fetching pages:", error);
-        setPages([]); // Clear pages on error
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
-  }, [activeTab, dateRange]);
+  }, [selectedTier]);
 
-  const handleTabClick = (tab: PerformanceTier | "All Pages") => {
-    setActiveTab(tab);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const tierParam = selectedTier === 'All Pages' ? '' : `&tier=${encodeURIComponent(selectedTier)}`;
+
+      // Fetch both pages and summary
+      const [pagesRes, summaryRes] = await Promise.all([
+        fetch(`/api/pages/tiers?limit=100${tierParam}`),
+        fetch('/api/pages/tiers?summary=true')
+      ]);
+
+      if (!pagesRes.ok) {
+        throw new Error(`Failed to fetch pages: ${pagesRes.statusText}`);
+      }
+
+      const pagesData = await pagesRes.json();
+      const summaryData = summaryRes.ok ? await summaryRes.json() : null;
+
+      setPages(Array.isArray(pagesData) ? pagesData : []);
+      setSummary(summaryData?.summary || null);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch page data';
+      setError(errorMessage);
+      console.error('Error fetching pages:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRowToggle = (url: string) => {
-    setExpandedRow(expandedRow === url ? null : url);
+  const formatMetricChange = (change?: number) => {
+    if (change === undefined || change === null) return 'N/A';
+    const percentage = (change * 100).toFixed(1);
+    const isPositive = change > 0;
+    return (
+      <span className={isPositive ? 'text-green-400' : change < 0 ? 'text-red-400' : 'text-gray-400'}>
+        {isPositive ? '+' : ''}{percentage}%
+      </span>
+    );
   };
 
-  if (isLoading) {
-    return <PagesListTableSkeleton />;
+  const getTierIcon = (tier: string) => {
+    const config = TIER_CONFIGS[tier as keyof typeof TIER_CONFIGS];
+    if (!config) return null;
+    const IconComponent = config.icon;
+    return <IconComponent className="w-4 h-4" />;
+  };
+
+  const getTierStyle = (tier: string) => {
+    return TIER_CONFIGS[tier as keyof typeof TIER_CONFIGS] || { color: 'text-gray-400', bg: 'bg-gray-800' };
+  };
+
+  // Pagination
+  const totalPages = Math.ceil(pages.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPages = pages.slice(startIndex, startIndex + itemsPerPage);
+
+  if (loading) {
+    return (
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-700 rounded w-1/3"></div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="h-16 bg-gray-700 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-gray-800 rounded-lg p-6">
+        <div className="text-center py-8">
+          <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-red-400 mb-2">Error Loading Performance Data</h3>
+          <p className="text-gray-400 mb-4">{error}</p>
+          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 max-w-lg mx-auto">
+            <p className="text-yellow-300 text-sm mb-2">
+              <strong>Common Solutions:</strong>
+            </p>
+            <ol className="text-yellow-200 text-sm space-y-1 text-left">
+              <li>1. Run GSC data ingestion cron job</li>
+              <li>2. Run the URL migration script</li>
+              <li>3. Run the daily stats cron job</li>
+              <li>4. Wait a few minutes and refresh</li>
+            </ol>
+          </div>
+          <button
+            onClick={fetchData}
+            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+          >
+            Retry Loading
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-      {/* Tabs & Filters */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-800 space-y-4">
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => handleTabClick(tab)}
-              className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
-                activeTab === tab
-                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
-                  : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-              )}
-            >
-              {tab}
-            </button>
-          ))}
+    <div className="space-y-6">
+      {/* Summary Stats Row */}
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Object.entries(summary.distribution).map(([tier, count]) => {
+            const style = getTierStyle(tier);
+            return (
+              <div key={tier} className={`${style.bg} rounded-lg p-4 border border-gray-700`}>
+                <div className="flex items-center space-x-2">
+                  <div className={style.color}>
+                    {getTierIcon(tier)}
+                  </div>
+                  <div className="text-sm text-gray-400">{tier}</div>
+                </div>
+                <div className={`text-2xl font-bold ${style.color}`}>{count}</div>
+                <div className="text-xs text-gray-500">
+                  {((count / summary.totalPages) * 100).toFixed(0)}% of pages
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Date Range:</span>
-          {DATE_RANGES.map((range) => (
-            <button
-              key={range.value}
-              onClick={() => setDateRange(range.value)}
-              className={cn(
-                "px-3 py-1 text-xs font-medium rounded-full transition-colors",
-                dateRange === range.value
-                  ? "bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-white"
-                  : "text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
-              )}
-            >
-              {range.label}
-            </button>
-          ))}
+      )}
+
+      {/* Key Insights */}
+      {summary?.keyInsights && summary.keyInsights.length > 0 && (
+        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+          <h3 className="text-lg font-semibold text-white mb-3">Key Insights</h3>
+          <div className="space-y-2">
+            {summary.keyInsights.slice(0, 3).map((insight, index) => (
+              <div key={index} className="flex items-start space-x-3 p-3 bg-gray-900/50 rounded">
+                <div className={`w-2 h-2 rounded-full mt-2 ${
+                  insight.type === 'opportunity' ? 'bg-green-400' :
+                  insight.type === 'risk' ? 'bg-red-400' : 'bg-yellow-400'
+                }`}></div>
+                <div>
+                  <div className="text-white font-medium">
+                    {insight.count} {insight.message}
+                  </div>
+                  <div className="text-gray-400 text-sm">{insight.impact}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Tier Filter Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-gray-700 pb-4">
+        {PERFORMANCE_TIERS.map(tier => {
+          const count = tier === 'All Pages'
+            ? summary?.totalPages || 0
+            : summary?.distribution[tier] || 0;
+
+          return (
+            <button
+              key={tier}
+              onClick={() => {
+                setSelectedTier(tier);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                selectedTier === tier
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {tier}
+              {count > 0 && (
+                <span className="ml-2 px-2 py-1 text-xs bg-gray-900 rounded-full">
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-          <thead className="bg-gray-50 dark:bg-gray-800/50">
-            <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Page</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Performance Tier</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Score</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Priority</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Clicks Change</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reasoning</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-            {!isLoading && pages.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                  No pages found for this tier.
-                </td>
-              </tr>
-            ) : (
-              pages.map((page) => (
-                <React.Fragment key={page.url}>
-                  <tr>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white truncate" title={page.title}>{page.title}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                        <Link href={page.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                          {page.url}
-                        </Link>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <TierPill tier={page.performance_tier} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800 dark:text-gray-200">
-                      {page.performance_score.toFixed(0)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <PriorityPill priority={page.performance_priority} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {/* ADD THIS CONDITIONAL CHECK */}
-                      {page.metrics?.kpis?.clicksChange !== undefined ? (
-                        <div className={cn(
-                          "flex items-center",
-                          page.metrics.kpis.clicksChange >= 0 ? "text-green-600" : "text-red-600"
-                        )}>
-                          {page.metrics.kpis.clicksChange >= 0 ? (
-                            <ArrowUp className="w-4 h-4 mr-1 flex-shrink-0" />
-                          ) : (
-                            <ArrowDown className="w-4 h-4 mr-1 flex-shrink-0" />
-                          )}
-                          <span>{Math.abs(page.metrics.kpis.clicksChange * 100).toFixed(1)}%</span>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">N/A</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
-                      {page.performance_reasoning}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button onClick={() => handleRowToggle(page.url)} className="text-blue-600 hover:text-blue-800">
-                        <ChevronDown className={cn("w-5 h-5 transition-transform", expandedRow === page.url && "rotate-180")} />
-                      </button>
-                    </td>
-                  </tr>
-                  {expandedRow === page.url && (
-                    <tr>
-                      <td colSpan={7}>
-                        <ExpandableRow page={page} />
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))
+      {/* Pages Table */}
+      <div className="bg-gray-800 rounded-lg overflow-hidden">
+        {pages.length === 0 ? (
+          <div className="text-center py-12">
+            <Eye className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-400 mb-2">
+              {selectedTier === 'All Pages' ? 'No Pages Found' : `No ${selectedTier} Pages`}
+            </h3>
+            <p className="text-gray-500 mb-4">
+              {selectedTier === 'All Pages'
+                ? 'Run the data ingestion and daily stats cron jobs to populate this dashboard.'
+                : `No pages are currently classified as ${selectedTier}.`
+              }
+            </p>
+            {summary?.recommendations && summary.recommendations.length > 0 && (
+              <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4 max-w-md mx-auto">
+                <p className="text-blue-300 text-sm">
+                  <strong>Next Step:</strong> {summary.recommendations[0].action}
+                </p>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-900">
+                  <tr>
+                    <th className="text-left p-4 text-gray-300 font-medium">Page</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Tier</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Score</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Clicks</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Change</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">CTR</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Priority</th>
+                    <th className="text-left p-4 text-gray-300 font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedPages.map((page, index) => {
+                    const tierStyle = getTierStyle(page.performance_tier);
+                    const recentClicks = page.metrics?.recent?.totalClicks || 0;
+                    const recentCtr = page.metrics?.recent?.averageCtr || 0;
+                    const clicksChange = page.metrics?.change?.clicks;
+
+                    return (
+                      <tr key={index} className="border-t border-gray-700 hover:bg-gray-900/50">
+                        <td className="p-4">
+                          <div>
+                            <div className="text-white font-medium mb-1">
+                              {page.title || 'Untitled Page'}
+                            </div>
+                            <div className="text-gray-400 text-sm truncate max-w-xs">
+                              {page.url}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className={`inline-flex items-center space-x-2 px-2 py-1 rounded-full ${tierStyle.bg}`}>
+                            <div className={tierStyle.color}>
+                              {getTierIcon(page.performance_tier)}
+                            </div>
+                            <span className={`text-sm font-medium ${tierStyle.color}`}>
+                              {page.performance_tier}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="text-white font-mono">
+                            {page.performance_score || 0}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="text-white font-medium">
+                            {recentClicks.toLocaleString()}
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          {formatMetricChange(clicksChange)}
+                        </td>
+                        <td className="p-4">
+                          <div className="text-white">
+                            {(recentCtr * 100).toFixed(2)}%
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            page.performance_priority === 'Critical' ? 'bg-red-900/30 text-red-400' :
+                            page.performance_priority === 'High' ? 'bg-orange-900/30 text-orange-400' :
+                            page.performance_priority === 'Medium' ? 'bg-yellow-900/30 text-yellow-400' :
+                            'bg-gray-700 text-gray-300'
+                          }`}>
+                            {page.performance_priority || 'Monitor'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="text-sm text-gray-300 max-w-xs">
+                            {page.marketing_action || page.performance_reasoning || 'Monitor performance'}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-700">
+                <div className="text-sm text-gray-400">
+                  Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, pages.length)} of {pages.length} pages
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-gray-400">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
-};
-
-export default PagesListTable;
+}
