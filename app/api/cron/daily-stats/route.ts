@@ -46,7 +46,7 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
     console.log('[Cron Job] No pages found. Creating sample pages from analytics data...');
 
     // Create pages from analytics data if none exist
-    const analyticsSnapshot = await firestore.collection('analytics')
+    const analyticsSnapshot = await firestore.collection('analytics_agg')
       .where('siteUrl', '==', siteUrl)
       .where('date', '>=', formatDate(recentStartDate))
       .limit(100)
@@ -104,13 +104,13 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
       // Fetch analytics data for both periods
       const [recentAnalyticsSnapshot, baselineAnalyticsSnapshot] = await Promise.all([
-        firestore.collection('analytics')
+        firestore.collection('analytics_agg')
           .where('siteUrl', '==', siteUrl)
           .where('page', '==', originalUrl)
           .where('date', '>=', formatDate(recentStartDate))
           .where('date', '<=', formatDate(endDate))
           .get(),
-        firestore.collection('analytics')
+        firestore.collection('analytics_agg')
           .where('siteUrl', '==', siteUrl)
           .where('page', '==', originalUrl)
           .where('date', '>=', formatDate(baselineStartDate))
