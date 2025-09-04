@@ -19,9 +19,9 @@ function getOriginalUrlFromPageDoc(pageDoc: any): string {
   return data?.originalUrl || data?.url || pageDoc.id.replace(/__/g, '/');
 }
 
-// Enhanced page tiering with better thresholds and recent data focus
+// Refactored page tiering for improved performance and quota management
 async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
-  console.log('[Cron Job] Starting advanced page tiering with recent data focus...');
+  console.log('[Cron Job] Starting advanced page tiering with a single query...');
 
   const siteUrl = 'sc-domain:hypefresh.com';
 
@@ -34,92 +34,55 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
   const baselineStartDate = new Date(recentStartDate);
   baselineStartDate.setDate(recentStartDate.getDate() - 28); // Previous 28 days
+  const baselineEndDate = new Date(recentStartDate);
+  baselineEndDate.setDate(recentStartDate.getDate() - 1);
 
   const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
-  console.log(`[Cron Job] Analyzing periods: ${formatDate(baselineStartDate)} to ${formatDate(recentStartDate)} vs ${formatDate(recentStartDate)} to ${formatDate(endDate)}`);
+  console.log(`[Cron Job] Analyzing periods: ${formatDate(baselineStartDate)} to ${formatDate(baselineEndDate)} vs ${formatDate(recentStartDate)} to ${formatDate(endDate)}`);
 
-  // Get all pages with their analytics data
+  // Step 1: Get all pages in a single batch
   const pagesSnapshot = await firestore.collection('pages').limit(200).get();
 
   if (pagesSnapshot.empty) {
-    console.log('[Cron Job] No pages found. Creating sample pages from analytics data...');
+    console.log('[Cron Job] No pages found. Cannot run tiering.');
+    return { processed: 0, distribution: {} };
+  }
 
-    // Create pages from analytics data if none exist
-    const analyticsSnapshot = await firestore.collection('analytics_agg')
+  const pages = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  // Step 2: Get all required analytics data in one or two queries
+  const allAnalyticsSnapshot = await firestore.collection('analytics_agg')
       .where('siteUrl', '==', siteUrl)
-      .where('date', '>=', formatDate(recentStartDate))
-      .limit(100)
+      .where('date', '>=', formatDate(baselineStartDate))
+      .where('date', '<=', formatDate(endDate))
       .get();
 
-    const uniquePages = new Set<string>();
-    analyticsSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (data.page) uniquePages.add(data.page);
-    });
+  const allAnalyticsData = allAnalyticsSnapshot.docs.map(doc => doc.data() as AnalyticsAggData);
 
-    const batch = firestore.batch();
-    Array.from(uniquePages).slice(0, 50).forEach(pageUrl => {
-      const sanitizedId = sanitizeUrlForFirestore(pageUrl);
-      if (sanitizedId.length > 3) {
-        const pageRef = firestore.collection('pages').doc(sanitizedId);
-        batch.set(pageRef, {
-          url: pageUrl,
-          originalUrl: pageUrl,
-          title: `Page: ${pageUrl.split('/').pop() || 'Untitled'}`,
-          siteUrl,
-          created_at: new Date().toISOString(),
-          performance_tier: 'New/Low Data',
-          performance_priority: 'Monitor'
-        });
+  const analyticsByPage: Map<string, AnalyticsAggData[]> = new Map();
+  allAnalyticsData.forEach(data => {
+      const page = data.page as string;
+      if (!analyticsByPage.has(page)) {
+          analyticsByPage.set(page, []);
       }
-    });
-
-    if (uniquePages.size > 0) {
-      await batch.commit();
-      console.log(`[Cron Job] Created ${Math.min(50, uniquePages.size)} pages from analytics data`);
-    }
-
-    return { processed: uniquePages.size, created: Math.min(50, uniquePages.size) };
-  }
+      analyticsByPage.get(page)?.push(data);
+  });
 
   const batch = firestore.batch();
   let processedCount = 0;
   let tierDistribution: Record<string, number> = {
-    'Champions': 0,
-    'Rising Stars': 0,
-    'Cash Cows': 0,
-    'Quick Wins': 0,
-    'Hidden Gems': 0,
-    'At Risk': 0,
-    'Declining': 0,
-    'Problem Pages': 0,
-    'New/Low Data': 0
+    'Champions': 0, 'Rising Stars': 0, 'Cash Cows': 0, 'Quick Wins': 0, 'Hidden Gems': 0,
+    'At Risk': 0, 'Declining': 0, 'Problem Pages': 0, 'New/Low Data': 0
   };
 
-  for (const pageDoc of pagesSnapshot.docs) {
+  for (const pageDoc of pages) {
     try {
-      const pageData = pageDoc.data();
-      const originalUrl = getOriginalUrlFromPageDoc(pageDoc);
+      const originalUrl = pageDoc.url;
+      const allPageAnalytics = analyticsByPage.get(originalUrl) || [];
 
-      // Fetch analytics data for both periods
-      const [recentAnalyticsSnapshot, baselineAnalyticsSnapshot] = await Promise.all([
-        firestore.collection('analytics_agg')
-          .where('siteUrl', '==', siteUrl)
-          .where('page', '==', originalUrl)
-          .where('date', '>=', formatDate(recentStartDate))
-          .where('date', '<=', formatDate(endDate))
-          .get(),
-        firestore.collection('analytics_agg')
-          .where('siteUrl', '==', siteUrl)
-          .where('page', '==', originalUrl)
-          .where('date', '>=', formatDate(baselineStartDate))
-          .where('date', '<', formatDate(recentStartDate))
-          .get()
-      ]);
-
-      const recentAnalytics = recentAnalyticsSnapshot.docs.map(doc => doc.data() as AnalyticsAggData);
-      const baselineAnalytics = baselineAnalyticsSnapshot.docs.map(doc => doc.data() as AnalyticsAggData);
+      const recentAnalytics = allPageAnalytics.filter(d => d.date >= formatDate(recentStartDate) && d.date <= formatDate(endDate));
+      const baselineAnalytics = allPageAnalytics.filter(d => d.date >= formatDate(baselineStartDate) && d.date < formatDate(recentStartDate));
 
       // Calculate comprehensive metrics
       const calculateMetrics = (data: AnalyticsAggData[]) => {
@@ -133,7 +96,7 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
         const totalClicks = data.reduce((sum, item) => sum + item.totalClicks, 0);
         const totalImpressions = data.reduce((sum, item) => sum + item.totalImpressions, 0);
-        const avgPosition = data.reduce((sum, item) => sum + item.averagePosition, 0) / data.length;
+        const avgPosition = data.length > 0 ? data.reduce((sum, item) => sum + item.averagePosition, 0) / data.length : 0;
         const averageCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
         return {
@@ -172,7 +135,7 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
           }
         };
 
-        batch.update(pageDoc.ref, updateData);
+        batch.update(firestore.collection('pages').doc(pageDoc.id), updateData);
         processedCount++;
         continue;
       }
@@ -322,10 +285,8 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
         confidence = 0.3;
       }
 
-      // Increment tier distribution
       tierDistribution[performance_tier]++;
 
-      // Update the page document
       const updateData = {
         originalUrl,
         url: originalUrl,
@@ -355,12 +316,8 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
         }
       };
 
-      batch.update(pageDoc.ref, updateData);
+      batch.update(firestore.collection('pages').doc(pageDoc.id), updateData);
       processedCount++;
-
-      if (processedCount % 10 === 0) {
-        console.log(`[Cron Job] Processed ${processedCount} pages so far...`);
-      }
 
     } catch (error) {
       console.error(`[Cron Job] Error processing page ${pageDoc.id}:`, error);
@@ -369,10 +326,8 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
     }
   }
 
-  // Commit all updates
   await batch.commit();
 
-  // Save tiering statistics
   await firestore.collection('tiering_stats').doc('latest').set({
     lastRun: new Date().toISOString(),
     totalPagesProcessed: processedCount,
@@ -396,7 +351,6 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate
   const userAgent = request.headers.get('user-agent');
   if (userAgent !== 'vercel-cron/1.0') {
     return NextResponse.json({ error: 'Unauthorized: Invalid user-agent.' }, { status: 401 });
@@ -421,32 +375,23 @@ export async function GET(request: NextRequest) {
 
     console.log('[Cron Job] Starting enhanced daily stats generation...');
 
-    // 2. Generate dashboard stats with recent data focus
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() - 1); // Use yesterday's data
+    endDate.setDate(endDate.getDate() - 1);
     const startDate = new Date(endDate);
-    startDate.setDate(endDate.getDate() - 30); // Last 30 days
+    startDate.setDate(endDate.getDate() - 30);
 
-    const formatDate = (d: Date) => d.toISOString().split('T')[0];
+    const formatDateStr = (d: Date) => d.toISOString().split('T')[0];
 
     const snapshot = await firestore
       .collection('analytics_agg')
       .where('siteUrl', '==', siteUrl)
-      .where('date', '>=', formatDate(startDate))
-      .where('date', '<=', formatDate(endDate))
+      .where('date', '>=', formatDateStr(startDate))
+      .where('date', '<=', formatDateStr(endDate))
       .orderBy('date', 'asc')
       .get();
 
     if (snapshot.empty) {
       console.log('[Cron Job] No analytics data found for dashboard stats');
-
-      await firestore.collection('dashboard_stats').doc('latest').set({
-        status: 'error',
-        lastUpdated: new Date().toISOString(),
-        error: 'No analytics data available',
-        message: 'Run GSC ingestion first to populate analytics data'
-      });
-
       return NextResponse.json({
         status: 'error',
         message: 'No analytics data found. Run GSC ingestion first.',
@@ -456,7 +401,6 @@ export async function GET(request: NextRequest) {
     const historicalData: AnalyticsAggData[] = snapshot.docs.map(doc => doc.data() as AnalyticsAggData);
     console.log(`[Cron Job] Processing ${historicalData.length} days of analytics data`);
 
-    // Calculate enhanced metrics
     const metricKeys: (keyof Omit<AnalyticsAggData, 'date' | 'siteUrl' | 'aggregatesByCountry' | 'aggregatesByDevice'>)[] =
       ['totalClicks', 'totalImpressions', 'averageCtr', 'averagePosition'];
 
@@ -476,37 +420,32 @@ export async function GET(request: NextRequest) {
         recommendations: []
       };
 
-      // Calculate trend if enough data
       if (dataSeries.length >= 7) {
         const { trend, rSquared } = trendAnalysis(dataSeries);
         smartMetric.trend = trend;
         smartMetric.trendConfidence = rSquared;
 
-        // Calculate 7-day change
         if (dataSeries.length >= 8) {
           const weekAgo = dataSeries[dataSeries.length - 8];
           smartMetric.change = weekAgo > 0 ? (latestValue - weekAgo) / weekAgo : 0;
         }
 
-        // Generate recommendations
         if (trend === 'down' && rSquared > 0.6) {
           smartMetric.recommendations.push(`${key} showing declining trend - investigate potential causes`);
         } else if (trend === 'up' && rSquared > 0.6) {
           smartMetric.recommendations.push(`${key} trending upward - identify and replicate success factors`);
         }
       }
-
       metrics[key] = smartMetric;
     }
 
-    // Save dashboard stats
     const dashboardStats = {
       status: 'success',
       lastUpdated: new Date().toISOString(),
       siteUrl,
       dateRange: {
-        start: formatDate(startDate),
-        end: formatDate(endDate)
+        start: formatDateStr(startDate),
+        end: formatDateStr(endDate)
       },
       dataPointsAnalyzed: historicalData.length,
       metrics,
@@ -521,7 +460,6 @@ export async function GET(request: NextRequest) {
     await firestore.collection('dashboard_stats').doc('latest').set(dashboardStats);
     console.log('[Cron Job] Dashboard stats updated successfully');
 
-    // 3. Run advanced page tiering
     const tieringResult = await runAdvancedPageTiering(firestore);
 
     return NextResponse.json({
@@ -538,7 +476,6 @@ export async function GET(request: NextRequest) {
     console.error('[Cron Job] Enhanced daily stats failed:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
 
-    // Save error state
     try {
       const firestore = initializeFirebaseAdmin();
       await firestore.collection('dashboard_stats').doc('latest').set({
@@ -559,7 +496,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function for statistics
 function getStats(data: number[]): { mean: number; stdDev: number } {
   const n = data.length;
   if (n === 0) return { mean: 0, stdDev: 0 };
