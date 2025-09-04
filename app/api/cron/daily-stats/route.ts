@@ -45,11 +45,47 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
   const pagesSnapshot = await firestore.collection('pages').limit(200).get();
 
   if (pagesSnapshot.empty) {
-    console.log('[Cron Job] No pages found. Cannot run tiering.');
-    return { processed: 0, distribution: {} };
+    console.log('[Cron Job] No pages found. Creating sample pages from analytics data...');
+
+    // Create pages from analytics data if none exist
+    const analyticsSnapshot = await firestore.collection('analytics_agg')
+      .where('siteUrl', '==', siteUrl)
+      .where('date', '>=', formatDate(recentStartDate))
+      .limit(100)
+      .get();
+
+    const uniquePages = new Set<string>();
+    analyticsSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data.page) uniquePages.add(data.page);
+    });
+
+    const batch = firestore.batch();
+    Array.from(uniquePages).slice(0, 50).forEach(pageUrl => {
+      const sanitizedId = sanitizeUrlForFirestore(pageUrl);
+      if (sanitizedId.length > 3) {
+        const pageRef = firestore.collection('pages').doc(sanitizedId);
+        batch.set(pageRef, {
+          url: pageUrl,
+          originalUrl: pageUrl,
+          title: `Page: ${pageUrl.split('/').pop() || 'Untitled'}`,
+          siteUrl,
+          created_at: new Date().toISOString(),
+          performance_tier: 'New/Low Data',
+          performance_priority: 'Monitor'
+        });
+      }
+    });
+
+    if (uniquePages.size > 0) {
+      await batch.commit();
+      console.log(`[Cron Job] Created ${Math.min(50, uniquePages.size)} pages from analytics data`);
+    }
+
+    return { processed: uniquePages.size, created: Math.min(50, uniquePages.size) };
   }
 
-  const pages = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const pages = pagesSnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as {url: string}) }));
 
   // Step 2: Get all required analytics data in one or two queries
   const allAnalyticsSnapshot = await firestore.collection('analytics_agg')
@@ -98,7 +134,7 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
         const totalClicks = data.reduce((sum, item) => sum + item.totalClicks, 0);
         const totalImpressions = data.reduce((sum, item) => sum + item.totalImpressions, 0);
-        const avgPosition = data.length > 0 ? data.reduce((sum, item) => sum + item.averagePosition, 0) / data.length : 0;
+        const avgPosition = data.reduce((sum, item) => sum + item.averagePosition, 0) / data.length;
         const averageCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
         return {
