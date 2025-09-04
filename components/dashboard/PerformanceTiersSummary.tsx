@@ -1,274 +1,284 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import {
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  Target,
-  Trophy,
-  Eye,
-  Clock,
-  ArrowRight,
-  BarChart3,
-  Zap,
-  Shield,
-  AlertCircle
-} from 'lucide-react';
+'use client';
 
-interface TieringSummary {
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { TrendingUp, AlertCircle, Target, Eye, ArrowRight, RefreshCw } from 'lucide-react';
+
+interface TierData {
   lastRun: string;
-  totalPages: number;
-  distribution: Record<string, number>;
-  priorityBreakdown: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-    monitor: number;
-  };
-  keyInsights: Array<{
-    type: 'opportunity' | 'risk' | 'success';
-    message: string;
-    count: number;
-    impact: string;
-  }>;
-  recommendations: Array<{
-    priority: string;
-    action: string;
-    pagesAffected: number;
-    estimatedImpact: string;
-    timeframe: string;
-  }>;
+  totalPagesProcessed: number;
+  totalPagesInSystem?: number;
+  tierDistribution: Record<string, number>;
+  processingNote?: string;
 }
 
-const PerformanceTiersSummary = () => {
-  const [summary, setSummary] = useState<TieringSummary | null>(null);
+const TIER_CONFIG = {
+  'Champions': {
+    color: 'text-green-400 bg-green-900/20 border-green-500/30',
+    icon: '🏆',
+    description: 'High performing pages',
+    priority: 1
+  },
+  'Rising Stars': {
+    color: 'text-blue-400 bg-blue-900/20 border-blue-500/30',
+    icon: '⭐',
+    description: 'Growing traffic',
+    priority: 2
+  },
+  'Cash Cows': {
+    color: 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30',
+    icon: '💰',
+    description: 'Stable high visibility',
+    priority: 3
+  },
+  'Quick Wins': {
+    color: 'text-orange-400 bg-orange-900/20 border-orange-500/30',
+    icon: '⚡',
+    description: 'Optimization opportunities',
+    priority: 2
+  },
+  'Hidden Gems': {
+    color: 'text-purple-400 bg-purple-900/20 border-purple-500/30',
+    icon: '💎',
+    description: 'Untapped potential',
+    priority: 3
+  },
+  'At Risk': {
+    color: 'text-red-400 bg-red-900/20 border-red-500/30',
+    icon: '⚠️',
+    description: 'Needs attention',
+    priority: 1
+  },
+  'Declining': {
+    color: 'text-red-500 bg-red-900/30 border-red-500/40',
+    icon: '📉',
+    description: 'Urgent action required',
+    priority: 1
+  },
+  'Problem Pages': {
+    color: 'text-red-600 bg-red-900/40 border-red-500/50',
+    icon: '🚨',
+    description: 'Critical issues',
+    priority: 1
+  },
+  'New/Low Data': {
+    color: 'text-gray-400 bg-gray-800/50 border-gray-500/30',
+    icon: '📊',
+    description: 'Awaiting analysis',
+    priority: 4
+  }
+};
+
+export default function PerformanceTiersSummary() {
+  const [tierData, setTierData] = useState<TierData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSummary();
+    fetchTierData();
   }, []);
 
-  const fetchSummary = async () => {
+  const fetchTierData = async () => {
     try {
+      setLoading(true);
       const response = await fetch('/api/pages/tiers?summary=true');
       if (response.ok) {
         const data = await response.json();
-        setSummary(data.summary);
+        setTierData(data.summary);
       } else {
-        setError('Failed to load performance tiers data');
+        throw new Error('Failed to fetch tier data');
       }
     } catch (err) {
-      setError('Error fetching performance tiers');
-      console.error('Error:', err);
-    }
-    setLoading(false);
-  };
-
-  const getTierIcon = (tier: string, size = 18) => {
-    const iconProps = { size, className: "flex-shrink-0" };
-    switch (tier) {
-      case 'Champions': return <Trophy {...iconProps} className="text-yellow-500 flex-shrink-0" />;
-      case 'Rising Stars': return <TrendingUp {...iconProps} className="text-green-500 flex-shrink-0" />;
-      case 'Cash Cows': return <BarChart3 {...iconProps} className="text-blue-500 flex-shrink-0" />;
-      case 'Quick Wins': return <Target {...iconProps} className="text-purple-500 flex-shrink-0" />;
-      case 'Hidden Gems': return <Eye {...iconProps} className="text-cyan-500 flex-shrink-0" />;
-      case 'At Risk': return <AlertTriangle {...iconProps} className="text-red-500 flex-shrink-0" />;
-      case 'Declining': return <TrendingDown {...iconProps} className="text-orange-500 flex-shrink-0" />;
-      case 'Problem Pages': return <AlertCircle {...iconProps} className="text-red-700 flex-shrink-0" />;
-      default: return <Clock {...iconProps} className="text-gray-500 flex-shrink-0" />;
-    }
-  };
-
-  const getPriorityIcon = (priority: string) => {
-    switch (priority) {
-      case 'Critical': return <AlertTriangle className="text-red-500" size={16} />;
-      case 'High': return <Zap className="text-orange-500" size={16} />;
-      case 'Medium': return <Target className="text-yellow-500" size={16} />;
-      default: return <Shield className="text-green-500" size={16} />;
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
     }
   };
 
   if (loading) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Performance Tiers</h3>
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div className="animate-pulse">
+          <div className="h-6 bg-gray-700 rounded w-1/3 mb-4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-20 bg-gray-700 rounded"></div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !tierData) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-xl font-semibold text-white mb-4">Performance Tiers</h3>
-        <div className="text-center text-gray-400 py-8">
-          <AlertCircle className="mx-auto mb-2 text-red-500" size={24} />
-          <p>{error}</p>
-          <p className="text-sm mt-2">Run the daily stats cron job to generate tiering data</p>
+        <div className="flex items-center gap-3 mb-4">
+          <AlertCircle className="w-6 h-6 text-red-400" />
+          <h2 className="text-xl font-semibold text-white">Performance Overview</h2>
+        </div>
+        <div className="text-center py-8">
+          <div className="text-gray-400 mb-4">
+            {error || 'Unable to load performance data'}
+          </div>
+          <div className="space-y-2 text-sm text-gray-500">
+            <p>This could mean:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>No data has been processed yet</li>
+              <li>The daily stats cron job hasn't run</li>
+              <li>Firestore quota may be exhausted</li>
+            </ul>
+          </div>
+          <div className="flex gap-2 justify-center mt-6">
+            <button
+              onClick={fetchTierData}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+            <Link
+              href="/api/admin/generate-sample-data?secret=1Kk8_ArD8PL5"
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              target="_blank"
+            >
+              Generate Sample Data
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!summary) return null;
+  const distribution = tierData.tierDistribution || {};
+  const totalPages = tierData.totalPagesInSystem || tierData.totalPagesProcessed || 0;
 
-  const criticalActions = summary.recommendations.filter(r => r.priority === 'Critical');
-  const topTiers = Object.entries(summary.distribution)
-    .filter(([_, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
+  // Sort tiers by priority (critical issues first)
+  const sortedTiers = Object.entries(distribution)
+    .filter(([tier, count]) => count > 0)
+    .sort(([tierA], [tierB]) => {
+      const priorityA = TIER_CONFIG[tierA]?.priority || 5;
+      const priorityB = TIER_CONFIG[tierB]?.priority || 5;
+      return priorityA - priorityB;
+    });
+
+  // Calculate key metrics
+  const needsAttention = (distribution['At Risk'] || 0) +
+                        (distribution['Declining'] || 0) +
+                        (distribution['Problem Pages'] || 0);
+
+  const opportunities = (distribution['Quick Wins'] || 0) +
+                       (distribution['Hidden Gems'] || 0);
+
+  const performers = (distribution['Champions'] || 0) +
+                    (distribution['Rising Stars'] || 0) +
+                    (distribution['Cash Cows'] || 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header Card */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-white">Performance Tiers Overview</h3>
-          <div className="text-sm text-gray-400">
-            {summary.totalPages} pages analyzed
+    <div className="bg-gray-800 rounded-lg p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Target className="w-6 h-6 text-blue-400" />
+          <h2 className="text-xl font-semibold text-white">Performance Overview</h2>
+        </div>
+        <Link
+          href="/performance"
+          className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm font-medium"
+        >
+          View Details <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+
+      {/* Key Metrics Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gray-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Eye className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-gray-400">Total Pages</span>
           </div>
+          <div className="text-2xl font-bold text-white">{totalPages}</div>
+          <div className="text-xs text-gray-500">Analyzed pages</div>
         </div>
 
-        {/* Critical Alerts */}
-        {criticalActions.length > 0 && (
-          <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 mb-6">
-            <div className="flex items-center space-x-2 mb-2">
-              <AlertTriangle className="text-red-400" size={20} />
-              <h4 className="font-semibold text-red-400">Critical Issues Detected</h4>
-            </div>
-            <div className="space-y-2">
-              {criticalActions.map((action, index) => (
-                <div key={index} className="text-sm text-red-200">
-                  <span className="font-medium">{action.pagesAffected} pages:</span> {action.action}
-                  <div className="text-red-300 text-xs">Impact: {action.estimatedImpact}</div>
-                </div>
-              ))}
-            </div>
+        <div className="bg-gray-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-green-400" />
+            <span className="text-sm text-gray-400">Top Performers</span>
           </div>
-        )}
-
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-1">
-              <AlertTriangle className="text-red-500" size={16} />
-              <span className="text-sm text-gray-300">Critical</span>
-            </div>
-            <div className="text-2xl font-bold text-white">{summary.priorityBreakdown.critical}</div>
-          </div>
-
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-1">
-              <Target className="text-purple-500" size={16} />
-              <span className="text-sm text-gray-300">Quick Wins</span>
-            </div>
-            <div className="text-2xl font-bold text-white">{summary.distribution['Quick Wins'] || 0}</div>
-          </div>
-
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-1">
-              <TrendingUp className="text-green-500" size={16} />
-              <span className="text-sm text-gray-300">Rising</span>
-            </div>
-            <div className="text-2xl font-bold text-white">{summary.distribution['Rising Stars'] || 0}</div>
-          </div>
-
-          <div className="bg-gray-700 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-1">
-              <Trophy className="text-yellow-500" size={16} />
-              <span className="text-sm text-gray-300">Champions</span>
-            </div>
-            <div className="text-2xl font-bold text-white">{summary.distribution['Champions'] || 0}</div>
-          </div>
+          <div className="text-2xl font-bold text-green-400">{performers}</div>
+          <div className="text-xs text-gray-500">Champions, Stars, Cows</div>
         </div>
 
-        {/* Top Recommendations */}
-        <div className="space-y-3">
-          <h4 className="font-semibold text-white">Top Recommendations</h4>
-          {summary.recommendations.slice(0, 3).map((rec, index) => (
-            <div key={index} className="bg-gray-700 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center space-x-2">
-                  {getPriorityIcon(rec.priority)}
-                  <span className="font-medium text-white">{rec.action}</span>
-                </div>
-                <div className="text-xs text-gray-400">{rec.timeframe}</div>
-              </div>
-              <div className="flex items-center justify-between text-sm text-gray-300">
-                <span>{rec.pagesAffected} pages affected</span>
-                <span className="text-green-400">{rec.estimatedImpact}</span>
-              </div>
-            </div>
-          ))}
+        <div className="bg-gray-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-4 h-4 text-orange-400" />
+            <span className="text-sm text-gray-400">Opportunities</span>
+          </div>
+          <div className="text-2xl font-bold text-orange-400">{opportunities}</div>
+          <div className="text-xs text-gray-500">Quick wins available</div>
+        </div>
+
+        <div className="bg-gray-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="w-4 h-4 text-red-400" />
+            <span className="text-sm text-gray-400">Needs Attention</span>
+          </div>
+          <div className="text-2xl font-bold text-red-400">{needsAttention}</div>
+          <div className="text-xs text-gray-500">At risk or declining</div>
         </div>
       </div>
 
       {/* Tier Distribution */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h4 className="font-semibold text-white mb-4">Tier Distribution</h4>
-        <div className="space-y-3">
-          {topTiers.map(([tier, count]) => (
-            <div key={tier} className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                {getTierIcon(tier)}
-                <span className="text-white">{tier}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <span className="text-gray-400">{count} pages</span>
-                <div className="w-20 h-2 bg-gray-700 rounded">
-                  <div
-                    className="h-full bg-blue-500 rounded"
-                    style={{ width: `${(count / summary.totalPages) * 100}%` }}
-                  />
+      <div className="space-y-3">
+        <h3 className="text-lg font-medium text-white mb-4">Page Distribution by Performance Tier</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {sortedTiers.map(([tier, count]) => {
+            const config = TIER_CONFIG[tier];
+            if (!config) return null;
+
+            const percentage = totalPages > 0 ? Math.round((count / totalPages) * 100) : 0;
+
+            return (
+              <Link
+                key={tier}
+                href={`/performance?tier=${encodeURIComponent(tier)}`}
+                className={`block p-4 rounded-lg border transition-all hover:scale-105 hover:shadow-lg ${config.color}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{config.icon}</span>
+                    <span className="font-medium">{tier}</span>
+                  </div>
+                  <span className="text-2xl font-bold">{count}</span>
                 </div>
-                <span className="text-sm text-gray-500 w-10 text-right">
-                  {((count / summary.totalPages) * 100).toFixed(0)}%
-                </span>
-              </div>
-            </div>
-          ))}
+                <div className="text-sm opacity-80 mb-2">{config.description}</div>
+                <div className="flex items-center justify-between text-xs">
+                  <span>{percentage}% of pages</span>
+                  {config.priority <= 2 && (
+                    <span className="bg-current bg-opacity-20 px-2 py-1 rounded">
+                      {config.priority === 1 ? 'High Priority' : 'Medium Priority'}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      {/* Key Insights */}
-      {summary.keyInsights.length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h4 className="font-semibold text-white mb-4">Key Insights</h4>
-          <div className="space-y-3">
-            {summary.keyInsights.map((insight, index) => (
-              <div key={index} className="flex items-start space-x-3">
-                <div className={`w-3 h-3 rounded-full mt-1.5 flex-shrink-0 ${
-                  insight.type === 'risk' ? 'bg-red-500' :
-                  insight.type === 'opportunity' ? 'bg-green-500' : 'bg-blue-500'
-                }`} />
-                <div className="flex-1">
-                  <p className="text-white">
-                    <span className="font-medium">{insight.count}</span> {insight.message}
-                  </p>
-                  <p className="text-sm text-gray-400">{insight.impact}</p>
-                </div>
-              </div>
-            ))}
+      {/* Status Footer */}
+      <div className="mt-6 pt-4 border-t border-gray-700">
+        <div className="flex items-center justify-between text-sm text-gray-400">
+          <div>
+            Last updated: {new Date(tierData.lastRun).toLocaleString()}
           </div>
+          {tierData.processingNote && (
+            <div className="text-blue-400" title={tierData.processingNote}>
+              ℹ️ {tierData.processingNote.split(' - ')[0]}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* View All Button */}
-      <div className="text-center">
-        <a
-          href="/performance"
-          className="inline-flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-        >
-          <span>View All Performance Tiers</span>
-          <ArrowRight size={16} />
-        </a>
       </div>
     </div>
   );
-};
-
-export default PerformanceTiersSummary;
+}
