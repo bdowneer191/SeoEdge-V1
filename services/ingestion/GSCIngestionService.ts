@@ -5,6 +5,7 @@ import { normalizeUrl } from './urlUtils';
 
 // Copied from AggregationService - this will be the new home for this interface
 export interface AnalyticsAggData {
+  page?: string;
   date: string;
   siteUrl: string;
   totalClicks: number;

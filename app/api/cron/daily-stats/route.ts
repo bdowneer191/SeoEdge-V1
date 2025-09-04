@@ -62,11 +62,13 @@ async function runAdvancedPageTiering(firestore: FirebaseFirestore.Firestore) {
 
   const analyticsByPage: Map<string, AnalyticsAggData[]> = new Map();
   allAnalyticsData.forEach(data => {
-      const page = data.page as string;
-      if (!analyticsByPage.has(page)) {
-          analyticsByPage.set(page, []);
+      if (data.page) {
+        const page = data.page;
+        if (!analyticsByPage.has(page)) {
+            analyticsByPage.set(page, []);
+        }
+        analyticsByPage.get(page)?.push(data);
       }
-      analyticsByPage.get(page)?.push(data);
   });
 
   const batch = firestore.batch();
