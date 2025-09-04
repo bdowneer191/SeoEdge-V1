@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
 import { trendAnalysis } from '@/lib/analytics/trend';
-import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
+import { GSCIngestionService, AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 
 function sanitizeUrlForFirestore(url: string): string {
   if (!url) return '';
@@ -410,6 +410,14 @@ export async function GET(request: NextRequest) {
   try {
     const firestore = initializeFirebaseAdmin();
     const siteUrl = 'sc-domain:hypefresh.com';
+
+    console.log('[Cron Job] Starting daily GSC ingestion...');
+    const ingestionService = new GSCIngestionService();
+    const dateToFetch = new Date();
+    dateToFetch.setDate(dateToFetch.getDate() - 2);
+    const formattedDate = dateToFetch.toISOString().split('T')[0];
+    await ingestionService.ingestDailySummary(siteUrl, formattedDate);
+    console.log(`[Cron Job] Daily GSC summary ingestion completed for ${formattedDate}.`);
 
     console.log('[Cron Job] Starting enhanced daily stats generation...');
 
