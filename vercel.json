@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/daily-stats",
+      "path": "/api/cron/safe-daily-stats",
       "schedule": "0 6 * * *"
     },
     {
