@@ -1,41 +1,24 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import React from 'react';
 import { ICONS } from '@/components/icons';
 import FirebaseDebug from '../FirebaseDebug';
+import { AuthProvider, useAuth } from '@/contexts/auth-context';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+const navItems = [
+  { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '#' },
+  { name: 'Reports', icon: ICONS.REPORTS, href: '#' },
+  { name: 'Performance Tiers', icon: ICONS.REPORTS, href: '/performance' },
+  { name: 'AI Companion', icon: ICONS.AI_COMPANION, href: '#' },
+  { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
+];
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        router.push('/login');
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [router]);
-
-  const navItems = [
-    { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '#' },
-    { name: 'Reports', icon: ICONS.REPORTS, href: '#' },
-    { name: 'Performance Tiers', icon: ICONS.REPORTS, href: '/performance' },
-    { name: 'AI Companion', icon: ICONS.AI_COMPANION, href: '#' },
-    { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
-  ];
+const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) => {
+  const { user, loading } = useAuth();
 
   if (loading) {
     return <div>Loading...</div>;
@@ -60,8 +43,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                   href={item.href}
                   className={`flex items-center space-x-3 p-3 rounded-md transition-colors duration-200 ${
                     item.name === 'Dashboard'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:bg-gray-700 hover:text-white'
                   }`}
                 >
                   {item.icon}
@@ -77,6 +60,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         {children}
       </main>
     </div>
+  );
+};
+
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
+  return (
+    <AuthProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </AuthProvider>
   );
 };
 
