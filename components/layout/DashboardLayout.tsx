@@ -1,11 +1,34 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { ICONS } from '@/components/icons';
+import FirebaseDebug from '../FirebaseDebug';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        router.push('/login');
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
   const navItems = [
     { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '#' },
     { name: 'Reports', icon: ICONS.REPORTS, href: '#' },
@@ -14,8 +37,17 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
   ];
 
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300">
+      <FirebaseDebug />
       <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 bg-gray-800 border-r border-gray-700">
         <div className="flex items-center h-16 px-6 flex-shrink-0">
           <h1 className="text-2xl font-bold text-white">SeoEdge</h1>
