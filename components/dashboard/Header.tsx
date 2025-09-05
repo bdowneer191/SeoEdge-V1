@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { TrendingUp, Activity, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface HealthStatus {
@@ -14,6 +16,15 @@ const Header: React.FC = () => {
     status: 'healthy',
     message: 'All systems operational'
   });
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      // The auth state listener in DashboardLayout will handle the redirect.
+    } catch (error) {
+      console.error('Error signing out: ', error);
+    }
+  };
 
   // Simple health check (you can connect this to your diagnostics API later)
   const checkSystemHealth = async () => {
@@ -84,6 +95,12 @@ const Header: React.FC = () => {
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
             >
               Refresh Data
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+            >
+              Sign Out
             </button>
           </div>
 
