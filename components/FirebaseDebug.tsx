@@ -31,11 +31,12 @@ const FirebaseDebug = () => {
       // Check environment variables
       requiredEnvVars.forEach(varName => {
         const value = process.env[varName];
-        const isValid = value && value !== 'undefined' && value.trim() !== '';
+        const isValid = typeof value === 'string' && value.trim() !== '' && value !== 'undefined';
         envVars[varName] = isValid;
 
         if (!isValid) {
-          errors.push(`Missing or invalid environment variable: ${varName}`);
+          const details = value === undefined ? 'missing' : `invalid value: "${value}"`;
+          errors.push(`Environment variable ${varName} is ${details}`);
         }
       });
 
