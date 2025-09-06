@@ -1,6 +1,6 @@
 // lib/firebase.ts
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -12,14 +12,45 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app;
-// Use getApps() to check for existing apps
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
+// Validate configuration
+function validateConfig() {
+  const required = [
+    'NEXT_PUBLIC_FIREBASE_API_KEY',
+    'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+  ];
+
+  for (const key of required) {
+    if (!process.env[key]) {
+      console.error(`Missing Firebase config: ${key}`);
+      return false;
+    }
+  }
+  return true;
 }
 
-const auth = getAuth(app);
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+
+// Only initialize on client side with valid config
+if (typeof window !== 'undefined' && validateConfig()) {
+  try {
+    // Check if app already exists
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApp();
+    }
+    
+    // Initialize auth only after app is ready
+    if (app) {
+      auth = getAuth(app);
+    }
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+    app = null;
+    auth = null;
+  }
+}
 
 export { app, auth };
