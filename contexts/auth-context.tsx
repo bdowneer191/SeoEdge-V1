@@ -3,8 +3,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { onAuthStateChanged, User, getAuth, type Auth } from 'firebase/auth';
+import { app } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -17,18 +17,29 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authInstance, setAuthInstance] = useState<Auth | null>(null); // State for auth object
   const router = useRouter();
 
   useEffect(() => {
-    // Add this check to prevent the app from crashing if 'auth' is undefined
-    if (!auth) {
-      console.error("Firebase auth object is not initialized.");
+    if (!app) {
+      console.error("Firebase app is not initialized.");
       setLoading(false);
       router.push('/login');
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    // Lazily get the auth instance to ensure it's client-side
+    const currentAuth = getAuth(app);
+    setAuthInstance(currentAuth);
+  }, [router]);
+
+  useEffect(() => {
+    if (!authInstance) {
+      // If auth is not yet initialized, don't set up listener
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(authInstance, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
       } else {
@@ -38,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [authInstance, router]); // Dependency on authInstance
 
   return (
     <AuthContext.Provider value={{ user, loading }}>
