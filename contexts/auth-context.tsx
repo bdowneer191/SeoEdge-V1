@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  auth: Auth | null; // Add auth to the context type
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,42 +18,55 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authInstance, setAuthInstance] = useState<Auth | null>(null); // State for auth object
+  const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    if (!app) {
-      console.error("Firebase app is not initialized.");
+    // Check if we're on the client side and firebase app is available
+    if (typeof window === 'undefined' || !app) {
+      console.error("Firebase app is not initialized or not in browser.");
       setLoading(false);
-      router.push('/login');
       return;
     }
 
-    // Lazily get the auth instance to ensure it's client-side
-    const currentAuth = getAuth(app);
-    setAuthInstance(currentAuth);
+    try {
+      // Initialize auth instance
+      const currentAuth = getAuth(app);
+      setAuthInstance(currentAuth);
+      
+      // Set up auth state listener immediately
+      const unsubscribe = onAuthStateChanged(currentAuth, (currentUser) => {
+        console.log('Auth state changed:', currentUser?.uid || 'no user');
+        setUser(currentUser);
+        setLoading(false);
+        
+        // Only redirect to login if no user and not already on login page
+        if (!currentUser && typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          router.push('/login');
+        }
+      });
+
+      return () => {
+        unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error initializing auth:', error);
+      setLoading(false);
+      setAuthInstance(null);
+    }
   }, [router]);
 
-  useEffect(() => {
-    if (!authInstance) {
-      // If auth is not yet initialized, don't set up listener
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(authInstance, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        router.push('/login');
-      }
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [authInstance, router]); // Dependency on authInstance
+  // Don't render children until auth is initialized
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, auth: authInstance }}>
       {children}
     </AuthContext.Provider>
   );
