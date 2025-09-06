@@ -12,7 +12,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Validate configuration
+// More detailed validation with better error messages
 function validateConfig() {
   const required = [
     'NEXT_PUBLIC_FIREBASE_API_KEY',
@@ -20,31 +20,52 @@ function validateConfig() {
     'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
   ];
 
+  const missing: string[] = [];
+
   for (const key of required) {
-    if (!process.env[key]) {
-      console.error(`Missing Firebase config: ${key}`);
-      return false;
+    if (!process.env[key] || process.env[key] === 'undefined' || process.env[key] === '') {
+      missing.push(key);
     }
   }
+
+  if (missing.length > 0) {
+    console.error('Firebase Config Validation Failed');
+    console.error('Missing or invalid environment variables:', missing);
+    console.error('Current environment variables:');
+    for (const key of required) {
+      console.error(`${key}: ${process.env[key] ? '[SET]' : '[MISSING]'}`);
+    }
+    return false;
+  }
+
   return true;
 }
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 
-// Only initialize on client side with valid config
-if (typeof window !== 'undefined' && validateConfig()) {
+// More robust initialization with better error handling
+if (typeof window !== 'undefined') {
   try {
-    // Check if app already exists
-    if (!getApps().length) {
-      app = initializeApp(firebaseConfig);
+    if (validateConfig()) {
+      // Check if app already exists
+      if (!getApps().length) {
+        console.log('Initializing Firebase app...');
+        app = initializeApp(firebaseConfig);
+        console.log('Firebase app initialized successfully');
+      } else {
+        app = getApp();
+        console.log('Using existing Firebase app');
+      }
+      
+      // Initialize auth only after app is ready
+      if (app) {
+        auth = getAuth(app);
+        console.log('Firebase Auth initialized successfully');
+      }
     } else {
-      app = getApp();
-    }
-    
-    // Initialize auth only after app is ready
-    if (app) {
-      auth = getAuth(app);
+      console.error('Firebase configuration validation failed. App will not function properly.');
+      // Don't set app/auth to null here, leave them as null to indicate failure
     }
   } catch (error) {
     console.error('Firebase initialization error:', error);
@@ -53,4 +74,19 @@ if (typeof window !== 'undefined' && validateConfig()) {
   }
 }
 
+// Export with safety checks
 export { app, auth };
+
+// Helper function to check if Firebase is properly initialized
+export function isFirebaseInitialized(): boolean {
+  return app !== null && auth !== null;
+}
+
+// Helper function to get initialization status
+export function getFirebaseStatus() {
+  return {
+    app: app !== null,
+    auth: auth !== null,
+    config: validateConfig()
+  };
+}
