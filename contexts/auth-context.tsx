@@ -12,67 +12,101 @@ interface AuthContextType {
   loading: boolean;
   auth: Auth | null;
   error: string | null;
+  isInitialized: boolean; // Add this to track initialization state
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Create context with a default value to prevent undefined errors
+const defaultContextValue: AuthContextType = {
+  user: null,
+  loading: true,
+  auth: null,
+  error: null,
+  isInitialized: false,
+};
+
+const AuthContext = createContext<AuthContextType>(defaultContextValue);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    // Check if we're on the client side
+    // Ensure we're on the client side
     if (typeof window === 'undefined') {
       setLoading(false);
+      setIsInitialized(true);
       return;
     }
 
-    // Check Firebase initialization status
-    const status = getFirebaseStatus();
-    console.log('Firebase status:', status);
+    // Add a small delay to ensure Firebase is fully loaded
+    const initializeAuth = async () => {
+      try {
+        // Wait a bit for Firebase to initialize
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (!isFirebaseInitialized() || !app) {
-      console.error("Firebase is not properly initialized");
-      setError("Firebase configuration error. Please check your environment variables.");
-      setLoading(false);
-      return;
-    }
+        // Check Firebase initialization status
+        const status = getFirebaseStatus();
+        console.log('Firebase status:', status);
 
-    try {
-      // Initialize auth instance
-      const currentAuth = getAuth(app);
-      setAuthInstance(currentAuth);
-      
-      // Set up auth state listener
-      const unsubscribe = onAuthStateChanged(currentAuth, (currentUser) => {
-        console.log('Auth state changed:', currentUser?.uid || 'no user');
-        setUser(currentUser);
-        setLoading(false);
-        setError(null);
-        
-        // Only redirect to login if no user and not already on login page
-        if (!currentUser && typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          console.log('No user found, redirecting to login...');
-          router.push('/login');
+        if (!isFirebaseInitialized() || !app) {
+          console.error("Firebase is not properly initialized");
+          setError("Firebase configuration error. Please check your environment variables.");
+          setLoading(false);
+          setIsInitialized(true);
+          return;
         }
-      }, (authError) => {
-        console.error('Auth state change error:', authError);
-        setError(`Authentication error: ${authError.message}`);
-        setLoading(false);
-      });
 
-      return () => {
-        unsubscribe();
-      };
-    } catch (error: any) {
-      console.error('Error initializing auth:', error);
-      setError(`Auth initialization error: ${error.message}`);
-      setLoading(false);
-      setAuthInstance(null);
-    }
+        // Initialize auth instance
+        const currentAuth = getAuth(app);
+        setAuthInstance(currentAuth);
+        setIsInitialized(true);
+        
+        // Set up auth state listener
+        const unsubscribe = onAuthStateChanged(
+          currentAuth, 
+          (currentUser) => {
+            console.log('Auth state changed:', currentUser?.uid || 'no user');
+            setUser(currentUser);
+            setLoading(false);
+            setError(null);
+            
+            // Only redirect to login if no user and not already on login/public pages
+            if (!currentUser && typeof window !== 'undefined') {
+              const currentPath = window.location.pathname;
+              const publicPaths = ['/login', '/signup', '/forgot-password', '/'];
+              const isPublicPath = publicPaths.some(path => currentPath.startsWith(path));
+              
+              if (!isPublicPath) {
+                console.log('No user found, redirecting to login...');
+                router.push('/login');
+              }
+            }
+          }, 
+          (authError) => {
+            console.error('Auth state change error:', authError);
+            setError(`Authentication error: ${authError.message}`);
+            setLoading(false);
+            setIsInitialized(true);
+          }
+        );
+
+        return () => {
+          unsubscribe();
+        };
+      } catch (error: any) {
+        console.error('Error initializing auth:', error);
+        setError(`Auth initialization error: ${error.message}`);
+        setLoading(false);
+        setAuthInstance(null);
+        setIsInitialized(true);
+      }
+    };
+
+    initializeAuth();
   }, [router]);
 
   // Show error state if Firebase isn't configured properly
@@ -101,20 +135,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  // Show loading state
-  if (loading) {
+  // Show loading state only if not initialized or still loading
+  if (loading && !isInitialized) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Initializing authentication...</p>
         </div>
       </div>
     );
   }
 
+  const contextValue: AuthContextType = {
+    user,
+    loading,
+    auth: authInstance,
+    error,
+    isInitialized,
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, auth: authInstance, error }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
@@ -122,8 +164,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+  
+  // This should never happen with our default value, but keep as safety check
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+  
   return context;
+}
+
+// Optional: Hook for components that need to wait for auth to be ready
+export function useAuthReady() {
+  const { isInitialized, loading } = useAuth();
+  return isInitialized && !loading;
 }
