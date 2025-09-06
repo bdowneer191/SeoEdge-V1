@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useAuthReady } from '@/contexts/auth-context';
+import { useAuth } from '@/contexts/auth-context';
 
 interface AuthGuardProps {
   children: ReactNode;
@@ -18,18 +18,18 @@ export function AuthGuard({
   redirectTo = '/login'
 }: AuthGuardProps) {
   const { user, loading, error } = useAuth();
-  const isAuthReady = useAuthReady();
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthReady && requireAuth && !user && !error) {
+    // When loading is finished, check if user is required and not present
+    if (!loading && requireAuth && !user && !error) {
       console.log('AuthGuard: Redirecting to', redirectTo);
       router.push(redirectTo);
     }
-  }, [isAuthReady, user, error, requireAuth, redirectTo, router]);
+  }, [loading, user, error, requireAuth, redirectTo, router]);
 
   // Show loading state while auth is initializing
-  if (!isAuthReady || loading) {
+  if (loading) {
     return fallback || (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
