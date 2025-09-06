@@ -3,6 +3,7 @@
 import React from 'react';
 import { ICONS } from '@/components/icons';
 import FirebaseDebug from '../FirebaseDebug';
+import EnvDebug from '../EnvDebug';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 
 interface DashboardLayoutProps {
@@ -31,6 +32,7 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300">
       <FirebaseDebug />
+      <EnvDebug />
       <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 bg-gray-800 border-r border-gray-700">
         <div className="flex items-center h-16 px-6 flex-shrink-0">
           <h1 className="text-2xl font-bold text-white">SeoEdge</h1>
