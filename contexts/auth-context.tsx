@@ -1,3 +1,5 @@
+// contexts/auth-context.tsx
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -18,6 +20,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Add this check to prevent the app from crashing if 'auth' is undefined
+    if (!auth) {
+      console.error("Firebase auth object is not initialized.");
+      setLoading(false);
+      router.push('/login');
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
