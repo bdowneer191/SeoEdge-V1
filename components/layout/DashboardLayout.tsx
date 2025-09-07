@@ -4,7 +4,7 @@ import React from 'react';
 import { ICONS } from '@/components/icons';
 import FirebaseDebug from '../FirebaseDebug';
 import EnvDebug from '../EnvDebug';
-import { AuthProvider, useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/contexts/auth-context';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -18,15 +18,28 @@ const navItems = [
   { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
 ];
 
-const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) => {
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="min-h-screen bg-gray-900 text-gray-300 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gray-900 text-gray-300 flex items-center justify-center">
+        <div className="text-center">
+          <p>Please log in to access the dashboard.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -62,14 +75,6 @@ const DashboardLayoutContent: React.FC<DashboardLayoutProps> = ({ children }) =>
         {children}
       </main>
     </div>
-  );
-};
-
-const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  return (
-    <AuthProvider>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </AuthProvider>
   );
 };
 
