@@ -273,6 +273,10 @@ export const app = firebaseApp;
 export const auth = firebaseAuth;
 export const db = firebaseDb;
 
+// Legacy function exports for backward compatibility
+export const isFirebaseInitialized = isFirebaseReady;
+export const getFirebaseError = () => getFirebaseStatus().error;
+
 // Export default
 export default {
   getApp: getFirebaseApp,
