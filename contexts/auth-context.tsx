@@ -69,12 +69,7 @@ export function useAuth() {
   }
 
   // Debugging log as requested
-  console.log('useAuth state:', {
-    user: context.user ? { uid: context.user.uid, email: context.user.email } : null,
-    loading: context.loading,
-    firebaseReady: context.firebaseReady,
-    error: context.error
-  });
+  console.log('useAuth context:', context);
 
   return context;
 }
