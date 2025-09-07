@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { ICONS } from '@/components/icons';
-import FirebaseDebug from '../FirebaseDebug';
-import EnvDebug from '../EnvDebug';
+import FirebaseDebug from '@/components/FirebaseDebug';
+import EnvDebug from '@/components/EnvDebug';
 import { useAuth } from '@/contexts/auth-context';
 
 interface DashboardLayoutProps {
