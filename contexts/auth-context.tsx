@@ -1,9 +1,8 @@
-// contexts/auth-context.tsx - Fixed to work with new Firebase configuration
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { onAuthStateChanged, User, type Auth } from 'firebase/auth';
-import { getFirebaseAuth, isFirebaseReady, getFirebaseStatus } from '@/lib/firebase';
+import { onAuthStateChanged, User, signOut, type Auth } from 'firebase/auth';
+import { getFirebaseAuth, isFirebaseReady, getFirebaseStatus, reinitializeFirebase } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -12,7 +11,6 @@ interface AuthContextType {
   error: string | null;
   firebaseReady: boolean;
   signOut: () => Promise<void>;
-  refreshUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,121 +27,75 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const router = useRouter();
 
-  // Check Firebase initialization status
   useEffect(() => {
+    // Check Firebase initialization status
     const checkFirebaseStatus = () => {
-      const ready = isFirebaseReady();
-      const auth = getFirebaseAuth();
-      
-      setFirebaseReady(ready);
-      setAuthInstance(auth);
-
-      if (!ready) {
+      const isReady = isFirebaseReady();
+      setFirebaseReady(isReady);
+      if (isReady) {
+        const auth = getFirebaseAuth();
+        setAuthInstance(auth);
+      } else {
         const status = getFirebaseStatus();
         if (status.error) {
           setError(`Firebase initialization error: ${status.error}`);
-          console.error('Firebase not ready:', status);
+        } else {
+          setError(null);
         }
-      } else {
-        setError(null);
       }
     };
 
-    // Check immediately
     checkFirebaseStatus();
-
-    // Check periodically until Firebase is ready
     const interval = setInterval(() => {
       if (!firebaseReady) {
         checkFirebaseStatus();
       } else {
         clearInterval(interval);
       }
-    }, 1000);
+    }, 100); // Check more frequently to resolve quickly
 
     return () => clearInterval(interval);
   }, [firebaseReady]);
 
-  // Set up auth state listener when Firebase is ready
   useEffect(() => {
-    if (!authInstance || !firebaseReady) {
-      console.log('Auth listener not set up - Firebase not ready or no auth instance');
+    if (!authInstance) {
+      // Don't set up the listener until the auth instance is ready
+      setLoading(true);
       return;
     }
 
-    console.log('Setting up auth state listener...');
-    setLoading(true);
-
     const unsubscribe = onAuthStateChanged(
       authInstance,
-      (user) => {
-        console.log('Auth state changed:', user ? 'User logged in' : 'User logged out');
-        setUser(user);
+      (currentUser) => {
+        setUser(currentUser);
         setLoading(false);
-        setError(null);
       },
-      (error) => {
-        console.error('Auth state change error:', error);
-        setError(`Auth error: ${error.message}`);
+      (e) => {
+        setError(e.message);
         setUser(null);
         setLoading(false);
       }
     );
 
-    return () => {
-      console.log('Cleaning up auth state listener');
-      unsubscribe();
-    };
-  }, [authInstance, firebaseReady]);
+    return () => unsubscribe();
+  }, [authInstance]);
 
-  const signOut = async (): Promise<void> => {
-    if (!authInstance) {
-      throw new Error('Firebase Auth not initialized');
-    }
-
+  const handleSignOut = async () => {
+    if (!authInstance) return;
     try {
-      const { signOut: firebaseSignOut } = await import('firebase/auth');
-      await firebaseSignOut(authInstance);
-      setUser(null);
+      await signOut(authInstance);
       router.push('/login');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown sign out error';
-      setError(errorMessage);
-      throw error;
+    } catch (e) {
+      console.error('Sign out error:', e);
     }
   };
 
-  const refreshUser = () => {
-    if (authInstance?.currentUser) {
-      setUser(authInstance.currentUser);
-    }
-  };
-
-  // Show loading state while Firebase is initializing
-  if (!firebaseReady && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing Firebase...</p>
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">
-              {error}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const value: AuthContextType = {
+  const value = {
     user,
     loading,
     error,
     firebaseReady,
-    signOut,
-    refreshUser,
+    signOut: handleSignOut,
   };
 
   return (
@@ -153,38 +105,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 }
 
-export function useAuth(): AuthContextType {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}
-
-// Hook for checking if user is authenticated
-export function useRequireAuth(): AuthContextType {
-  const auth = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!auth.loading && !auth.user && auth.firebaseReady) {
-      router.push('/login');
-    }
-  }, [auth.loading, auth.user, auth.firebaseReady, router]);
-
-  return auth;
-}
-
-// Hook for redirecting authenticated users
-export function useRedirectIfAuthenticated(redirectTo: string = '/dashboard'): AuthContextType {
-  const auth = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!auth.loading && auth.user && auth.firebaseReady) {
-      router.push(redirectTo);
-    }
-  }, [auth.loading, auth.user, auth.firebaseReady, router, redirectTo]);
-
-  return auth;
 }
