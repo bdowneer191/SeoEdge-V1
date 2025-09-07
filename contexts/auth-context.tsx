@@ -24,66 +24,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
-  const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    // Check Firebase initialization status
-    const checkFirebaseStatus = () => {
+    // Periodically check for Firebase readiness
+    const interval = setInterval(() => {
       const isReady = isFirebaseReady();
-      setFirebaseReady(isReady);
       if (isReady) {
-        const auth = getFirebaseAuth();
-        setAuthInstance(auth);
+        setFirebaseReady(true);
+        clearInterval(interval);
       } else {
         const status = getFirebaseStatus();
         if (status.error) {
           setError(`Firebase initialization error: ${status.error}`);
-        } else {
-          setError(null);
+          clearInterval(interval); // Stop checking if there's a persistent error
         }
       }
-    };
-
-    checkFirebaseStatus();
-    const interval = setInterval(() => {
-      if (!firebaseReady) {
-        checkFirebaseStatus();
-      } else {
-        clearInterval(interval);
-      }
-    }, 100); // Check more frequently to resolve quickly
+    }, 100);
 
     return () => clearInterval(interval);
-  }, [firebaseReady]);
+  }, []);
 
   useEffect(() => {
-    if (!authInstance) {
-      // Don't set up the listener until the auth instance is ready
-      setLoading(true);
+    if (!firebaseReady) {
+      console.log('Firebase not ready, skipping auth listener.');
+      setLoading(true); // Keep loading until Firebase is ready
       return;
     }
 
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      console.log('No auth instance available, skipping listener.');
+      setError('Firebase auth instance not available.');
+      setLoading(false);
+      return;
+    }
+
+    console.log('Setting up auth state listener...');
     const unsubscribe = onAuthStateChanged(
-      authInstance,
+      auth,
       (currentUser) => {
+        console.log('Auth state changed:', currentUser ? 'User logged in' : 'No user');
         setUser(currentUser);
         setLoading(false);
+        setError(null);
       },
       (e) => {
+        console.error('Auth state error:', e);
         setError(e.message);
         setUser(null);
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
-  }, [authInstance]);
+    return () => {
+      console.log('Cleaning up auth state listener.');
+      unsubscribe();
+    };
+  }, [firebaseReady]);
 
   const handleSignOut = async () => {
-    if (!authInstance) return;
+    const auth = getFirebaseAuth();
+    if (!auth) return;
     try {
-      await signOut(authInstance);
+      await signOut(auth);
       router.push('/login');
     } catch (e) {
       console.error('Sign out error:', e);
