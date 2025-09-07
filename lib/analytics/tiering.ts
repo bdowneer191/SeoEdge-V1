@@ -1,7 +1,7 @@
 // Enhanced Performance Tiering Logic for better marketing decisions
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { trendAnalysis } from '@/lib/analytics/trend';
 import type { AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 

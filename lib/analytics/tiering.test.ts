@@ -1,9 +1,9 @@
 import { runAdvancedPageTiering } from './tiering';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { trendAnalysis } from '@/lib/analytics/trend';
 
 // Mock dependencies
-jest.mock('@/lib/firebaseAdmin', () => ({
+jest.mock('@/lib/firebaseConfig', () => ({
   initializeFirebaseAdmin: jest.fn(),
 }));
 

@@ -1,9 +1,9 @@
 import { GET } from './route';
 import { NextRequest } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 
-// Mock the firebaseAdmin module
-jest.mock('@/lib/firebaseAdmin', () => ({
+// Mock the firebaseConfig module
+jest.mock('@/lib/firebaseConfig', () => ({
   initializeFirebaseAdmin: jest.fn(),
 }));
 

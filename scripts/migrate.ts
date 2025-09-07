@@ -1,4 +1,4 @@
-import { initializeFirebaseAdmin } from '../lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '../lib/firebaseConfig';
 import { migratePagesWithInvalidIds } from '../utils/urlSanitizer';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
