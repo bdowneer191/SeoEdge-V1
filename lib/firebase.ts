@@ -195,10 +195,7 @@ function initializeFirebaseApp(): boolean {
 
 // Auto-initialize on client side
 if (typeof window !== 'undefined') {
-  // Use a small delay to ensure environment variables are loaded
-  setTimeout(() => {
-    initializeFirebaseApp();
-  }, 100);
+  initializeFirebaseApp();
 }
 
 // Export functions
