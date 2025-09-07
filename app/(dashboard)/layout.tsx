@@ -17,7 +17,7 @@ const navItems = [
 ];
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const { user, loading, firebaseReady } = useAuth();
+  const { user, loading, firebaseReady, error } = useAuth();
 
   // Show loading state while Firebase is initializing or user is being authenticated
   if (loading || !firebaseReady) {
@@ -26,6 +26,18 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p>Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle authentication errors
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-gray-300 flex items-center justify-center">
+        <div className="text-center p-6 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <h2 className="text-xl font-semibold text-red-400 mb-2">Authentication Error</h2>
+          <p className="text-red-300">{error}</p>
         </div>
       </div>
     );
