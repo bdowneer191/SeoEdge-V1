@@ -11,32 +11,32 @@ interface DashboardLayoutProps {
 }
 
 const navItems = [
-  { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '#' },
-  { name: 'Reports', icon: ICONS.REPORTS, href: '#' },
+  { name: 'Dashboard', icon: ICONS.DASHBOARD, href: '/' },
   { name: 'Performance Tiers', icon: ICONS.REPORTS, href: '/performance' },
-  { name: 'AI Companion', icon: ICONS.AI_COMPANION, href: '#' },
-  { name: 'Settings', icon: ICONS.SETTINGS, href: '#' },
+  // Add other navigation items here
 ];
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, firebaseReady } = useAuth();
 
-  if (loading) {
+  // Show loading state while Firebase is initializing or user is being authenticated
+  if (loading || !firebaseReady) {
     return (
       <div className="min-h-screen bg-gray-900 text-gray-300 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p>Loading...</p>
+          <p>Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
+  // Redirect to login handled by `AuthGuard` or `useRequireAuth` hook
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 text-gray-300 flex items-center justify-center">
         <div className="text-center">
-          <p>Please log in to access the dashboard.</p>
+          <p>Redirecting to login...</p>
         </div>
       </div>
     );
@@ -44,8 +44,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300">
-      <FirebaseDebug />
-      <EnvDebug />
+      {/* <FirebaseDebug /> */}
+      {/* <EnvDebug /> */}
       <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 bg-gray-800 border-r border-gray-700">
         <div className="flex items-center h-16 px-6 flex-shrink-0">
           <h1 className="text-2xl font-bold text-white">SeoEdge</h1>
@@ -57,7 +57,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                 <a
                   href={item.href}
                   className={`flex items-center space-x-3 p-3 rounded-md transition-colors duration-200 ${
-                    item.name === 'Dashboard'
+                    item.href === window.location.pathname
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-400 hover:bg-gray-700 hover:text-white'
                   }`}
