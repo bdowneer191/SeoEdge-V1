@@ -114,5 +114,14 @@ export function useAuth() {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
+  // Added for easier debugging of auth state from components
+  console.log('useAuth state:', {
+    user: context.user ? { uid: context.user.uid, email: context.user.email } : null,
+    loading: context.loading,
+    firebaseReady: context.firebaseReady,
+    error: context.error
+  });
+
   return context;
 }
