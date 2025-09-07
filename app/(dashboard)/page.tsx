@@ -78,6 +78,7 @@ export default function HomePage() {
               </div>
             )}
 
+            <p className="text-gray-400 text-sm mb-4">This may be due to initialization timing. Refresh or check console.</p>
             <div className="space-y-2 text-sm text-gray-400">
               <p><strong>Possible solutions:</strong></p>
               <ul className="list-disc list-inside space-y-1 text-left">
