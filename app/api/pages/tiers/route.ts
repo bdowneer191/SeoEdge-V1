@@ -1,6 +1,6 @@
 // app/api/pages/tiers/route.ts - Updated to handle sanitized URLs safely
 import { NextResponse } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';

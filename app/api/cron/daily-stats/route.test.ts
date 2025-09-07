@@ -1,11 +1,11 @@
 import { GET } from './route';
 import { NextRequest } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { trendAnalysis } from '@/lib/analytics/trend';
 import { runAdvancedPageTiering } from '@/lib/analytics/tiering';
 
 // Mock dependencies
-jest.mock('@/lib/firebaseAdmin', () => ({
+jest.mock('@/lib/firebaseConfig', () => ({
   initializeFirebaseAdmin: jest.fn(),
 }));
 

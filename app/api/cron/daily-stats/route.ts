@@ -1,6 +1,6 @@
 // app/api/cron/daily-stats/route.ts - Optimized for Firestore free tier
 import { NextResponse, type NextRequest } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { trendAnalysis } from '@/lib/analytics/trend';
 import { GSCIngestionService, AnalyticsAggData } from '@/services/ingestion/GSCIngestionService';
 

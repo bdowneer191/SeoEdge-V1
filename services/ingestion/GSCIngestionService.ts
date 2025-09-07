@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { google } from 'googleapis';
 import { normalizeUrl } from './urlUtils';
 

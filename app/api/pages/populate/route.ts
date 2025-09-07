@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { initializeFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { initializeFirebaseAdmin } from '@/lib/firebaseConfig';
 import { sanitizeUrlForFirestore } from '@/utils/urlSanitizer';
 
 export const dynamic = 'force-dynamic';
