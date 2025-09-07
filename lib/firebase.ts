@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, Firestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { envConfig, validateEnvConfig } from '@/lib/envConfig';
 
 // Type definitions
 interface FirebaseConfig {
@@ -45,62 +46,28 @@ function logError(message: string, error?: any) {
 // Validate and get Firebase configuration
 function getValidFirebaseConfig(): FirebaseConfig | null {
   // Only run on client side
-  if (typeof window === 'undefined') {
+  if (envConfig.isServer) {
     log('Skipping config validation on server side');
     return null;
   }
 
-  log('Validating Firebase configuration...');
+  log('Validating Firebase configuration using envConfig...');
   
-  // Get environment variables
-  const config = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  };
+  const validation = validateEnvConfig();
 
-  // Debug all environment variables
-  log('Environment check:', {
-    NODE_ENV: process.env.NODE_ENV,
-    apiKey: config.apiKey ? '✅ SET' : '❌ MISSING',
-    authDomain: config.authDomain ? '✅ SET' : '❌ MISSING',
-    projectId: config.projectId ? '✅ SET' : '❌ MISSING',
-    storageBucket: config.storageBucket ? '✅ SET' : '⚠️ OPTIONAL',
-    messagingSenderId: config.messagingSenderId ? '✅ SET' : '⚠️ OPTIONAL',
-    appId: config.appId ? '✅ SET' : '⚠️ OPTIONAL',
-  });
-
-  // Check required fields
-  const requiredFields = ['apiKey', 'authDomain', 'projectId'];
-  const missingFields = requiredFields.filter(field => !config[field as keyof typeof config]);
-
-  if (missingFields.length > 0) {
-    const error = `Missing required Firebase environment variables: ${missingFields.join(', ')}`;
-    logError(error);
+  if (!validation.valid) {
+    const error = `Firebase configuration validation failed: ${validation.errors.join(', ')}`;
+    logError(error, validation.errors);
     initializationStatus.error = error;
     return null;
   }
 
-  // Validate field formats
-  if (!config.apiKey?.startsWith('AIza')) {
-    const error = 'Invalid Firebase API key format';
-    logError(error);
-    initializationStatus.error = error;
-    return null;
-  }
-
-  if (!config.authDomain?.includes('.firebaseapp.com')) {
-    const error = 'Invalid Firebase auth domain format';
-    logError(error);
-    initializationStatus.error = error;
-    return null;
+  if (validation.warnings.length > 0) {
+    log('Firebase configuration warnings:', validation.warnings);
   }
 
   log('✅ Configuration validation passed');
-  return config as FirebaseConfig;
+  return envConfig.firebase as FirebaseConfig;
 }
 
 // Initialize Firebase
