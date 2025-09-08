@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User, signOut, type Auth } from 'firebase/auth';
-import { getFirebaseAuth, isFirebaseReady, getFirebaseStatus } from '@/lib/firebase';
+import { getFirebaseAuth, isFirebaseReady, getFirebaseStatus, auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
@@ -11,6 +11,7 @@ interface AuthContextType {
   error: string | null;
   firebaseReady: boolean;
   signOut: () => Promise<void>;
+  auth: Auth | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -89,6 +90,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     error,
     firebaseReady,
     signOut: handleSignOut,
+    auth,
   };
 
   return (
