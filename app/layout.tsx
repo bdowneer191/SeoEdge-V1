@@ -1,17 +1,17 @@
+// app/layout.tsx
 import type { Metadata } from 'next';
-import { Poppins } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
-import SafeFirebaseWrapper from '@/components/SafeFirebaseWrapper';
 import { AuthProvider } from '@/contexts/auth-context';
 
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700']
-});
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'SeoEdge',
-  description: 'AI-powered SEO analytics tool to diagnose and recover organic traffic.',
+  title: 'SeoEdge - Analytics Dashboard',
+  description: 'Advanced SEO analytics and monitoring platform',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
@@ -21,9 +21,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={poppins.className}>
+      <body className={inter.className}>
         <AuthProvider>
-          <SafeFirebaseWrapper>{children}</SafeFirebaseWrapper>
+          {children}
         </AuthProvider>
       </body>
     </html>
