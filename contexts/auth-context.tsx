@@ -1,96 +1,92 @@
+// contexts/auth-context.tsx
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { onAuthStateChanged, User, signOut, type Auth } from 'firebase/auth';
-import { getFirebaseAuth, isFirebaseReady, getFirebaseStatus, auth } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { getFirebaseAuth, isFirebaseReady } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  error: string | null;
-  firebaseReady: boolean;
   signOut: () => Promise<void>;
-  auth: Auth | null;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
 interface AuthProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [firebaseReady, setFirebaseReady] = useState(false);
-  const router = useRouter();
 
-  useEffect(() => {
-    // Periodically check for Firebase readiness
-    const interval = setInterval(() => {
-      const isReady = isFirebaseReady();
-      if (isReady) {
-        setFirebaseReady(true);
-        clearInterval(interval);
-      } else {
-        const status = getFirebaseStatus();
-        if (status.error) {
-          setError(`Firebase initialization error: ${status.error}`);
-          clearInterval(interval); // Stop checking if there's a persistent error
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (!firebaseReady) {
-      // Don't set up the listener until Firebase is ready
-      return;
-    }
-
-    const auth = getFirebaseAuth();
-    if (!auth) {
-      setError('Firebase auth instance not available.');
-      setLoading(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (currentUser) => {
-        setUser(currentUser);
-        setLoading(false);
-        setError(null);
-      },
-      (e) => {
-        setError(e.message);
-        setUser(null);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [firebaseReady]);
-
-  const handleSignOut = async () => {
+  const signOut = async (): Promise<void> => {
     const auth = getFirebaseAuth();
     if (auth) {
-      await signOut(auth);
-      router.push('/login');
+      await firebaseSignOut(auth);
     }
   };
 
-  const value = {
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+
+    const initializeAuth = () => {
+      // Wait for Firebase to be ready
+      if (!isFirebaseReady()) {
+        console.log('🔄 Firebase not ready, waiting...');
+        // Retry after a short delay
+        setTimeout(initializeAuth, 100);
+        return;
+      }
+
+      const auth = getFirebaseAuth();
+      if (!auth) {
+        console.error('❌ Firebase Auth not available');
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Setting up auth state listener');
+      
+      unsubscribe = onAuthStateChanged(
+        auth,
+        (user) => {
+          console.log('🔄 Auth state changed:', user ? 'User logged in' : 'User logged out');
+          setUser(user);
+          setLoading(false);
+        },
+        (error) => {
+          console.error('❌ Auth state change error:', error);
+          setUser(null);
+          setLoading(false);
+        }
+      );
+    };
+
+    initializeAuth();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  const value: AuthContextType = {
     user,
     loading,
-    error,
-    firebaseReady,
-    signOut: handleSignOut,
-    auth,
+    signOut,
+    isAuthenticated: !!user,
   };
 
   return (
@@ -98,14 +94,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-
-  console.log('useAuth context:', context);
-  return context;
-}
+};
