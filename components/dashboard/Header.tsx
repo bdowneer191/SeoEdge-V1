@@ -1,8 +1,8 @@
+// components/dashboard/Header.tsx
 'use client';
 
 import React, { useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/auth-context';
 import { TrendingUp, Activity, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface HealthStatus {
@@ -17,12 +17,14 @@ const Header: React.FC = () => {
     message: 'All systems operational'
   });
 
+  const { signOut, loading } = useAuth();
+
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
-      // The auth state listener in DashboardLayout will handle the redirect.
+      await signOut();
+      console.log('✅ User signed out successfully');
     } catch (error) {
-      console.error('Error signing out: ', error);
+      console.error('❌ Error signing out:', error);
     }
   };
 
@@ -33,8 +35,7 @@ const Header: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setHealthStatus({
-          status: data.overallHealth === 'healthy' ? 'healthy' :
-                  data.overallHealth === 'needs-attention' ? 'warning' : 'critical',
+          status: data.overallHealth === 'healthy' ? 'healthy' : data.overallHealth === 'needs-attention' ? 'warning' : 'critical',
           message: data.issues.length > 0 ? `${data.issues.length} issues detected` : 'All systems operational',
           lastUpdated: new Date().toLocaleTimeString()
         });
@@ -50,17 +51,23 @@ const Header: React.FC = () => {
 
   const getStatusIcon = () => {
     switch (healthStatus.status) {
-      case 'healthy': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'warning': return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
-      case 'critical': return <AlertTriangle className="w-4 h-4 text-red-400" />;
+      case 'healthy':
+        return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'warning':
+        return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+      case 'critical':
+        return <AlertTriangle className="w-4 h-4 text-red-400" />;
     }
   };
 
   const getStatusColor = () => {
     switch (healthStatus.status) {
-      case 'healthy': return 'text-green-400 bg-green-900/20 border-green-500/30';
-      case 'warning': return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
-      case 'critical': return 'text-red-400 bg-red-900/20 border-red-500/30';
+      case 'healthy':
+        return 'text-green-400 bg-green-900/20 border-green-500/30';
+      case 'warning':
+        return 'text-yellow-400 bg-yellow-900/20 border-yellow-500/30';
+      case 'critical':
+        return 'text-red-400 bg-red-900/20 border-red-500/30';
     }
   };
 
@@ -98,9 +105,14 @@ const Header: React.FC = () => {
             </button>
             <button
               onClick={handleSignOut}
-              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+              disabled={loading}
+              className={`px-3 py-1.5 text-white text-sm rounded-lg transition-colors ${
+                loading
+                  ? 'bg-red-400 cursor-not-allowed'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
             >
-              Sign Out
+              {loading ? 'Signing Out...' : 'Sign Out'}
             </button>
           </div>
 
